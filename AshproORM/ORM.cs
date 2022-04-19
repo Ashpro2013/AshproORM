@@ -11,24 +11,47 @@ using System.Threading.Tasks;
 
 namespace AshproORM
 {
+
     public class ORM
     {
 
         #region Public Method
 
         #region Async Method
+        public static async Task<dynamic> GetSingleDataAsync(string Query, string sConnection)
+        {
+            try
+            {
+                using (SqlConnection con = new SqlConnection(sConnection))
+                {
+                    using (SqlCommand cmd = new SqlCommand(Query, con))
+                    {
+                        con.Open();
+                        return await cmd.ExecuteScalarAsync();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+        }
         public static async Task<DataTable> GetDataTableAsync(string Query, string sConnection)
         {
-            var value = await Task.Run<DataTable>(() =>
+            var value = await Task<DataTable>.Factory.StartNew(() =>
             {
                 try
                 {
                     DataTable dt = new DataTable();
                     using (SqlConnection con = new SqlConnection(sConnection))
                     {
-                        using (SqlDataAdapter da = new SqlDataAdapter(Query, con))
+                        using (SqlCommand cmd = new SqlCommand(Query, con))
                         {
-                            da.Fill(dt);
+                            con.Open();
+                            using (SqlDataAdapter sdr = new SqlDataAdapter(cmd))
+                            {
+                                sdr.Fill(dt);
+                            }
                         }
                     }
                     return dt;
@@ -60,7 +83,7 @@ namespace AshproORM
                 throw ex;
             }
         }
-        public static async Task<dynamic> GetValueAsync(string Query, string Connection)
+        public static async Task<dynamic> ValueAsync(string Query, string Connection)
         {
             try
             {
@@ -80,7 +103,7 @@ namespace AshproORM
                 throw ex;
             }
         }
-        public static async Task<List<T>> GetListAsync<T>(string Query, string Connection)
+        public static async Task<List<T>> GetListAsync<T>(string Query = null, string Connection = null)
         {
             try
             {
@@ -122,30 +145,27 @@ namespace AshproORM
         }
         public static async Task<bool> DatabaseMethodAsync(string Query, string Connection)
         {
-            var value = await Task.Run<bool>(() =>
+            try
             {
-                try
-                {
-                    if (Query == string.Empty)
-                    {
-                        return false;
-                    }
-                    using (SqlConnection con = new SqlConnection(Connection))
-                    {
-                        using (SqlCommand cmd = new SqlCommand(Query, con))
-                        {
-                            con.Open();
-                            cmd.ExecuteNonQuery();
-                        }
-                    }
-                    return true;
-                }
-                catch (Exception)
+                if (Query == string.Empty)
                 {
                     return false;
                 }
-            });
-            return value;
+                using (SqlConnection con = new SqlConnection(Connection))
+                {
+                    using (SqlCommand cmd = new SqlCommand(Query, con))
+                    {
+                        await con.OpenAsync();
+                        await cmd.ExecuteNonQueryAsync();
+                    }
+                }
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+
         }
         public static async Task<bool> InsertAsync(List<object> datas, string table, string Connection)
         {
@@ -206,8 +226,8 @@ namespace AshproORM
                                 }
                             }
                         }
-                        con.Open();
-                        cmd.ExecuteNonQuery();
+                        await con.OpenAsync();
+                        await cmd.ExecuteNonQueryAsync();
                     }
                 }
                 return true;
@@ -261,8 +281,8 @@ namespace AshproORM
                                     cmd.Parameters.AddWithValue("@" + item.Name, item.GetValue(data, null).ToString());
                             }
                         }
-                        con.Open();
-                        cmd.ExecuteNonQuery();
+                        await con.OpenAsync();
+                        await cmd.ExecuteNonQueryAsync();
                     }
                 }
                 return true;
@@ -299,29 +319,25 @@ namespace AshproORM
         }
         public static async Task<bool> DeleteAsync(string table, string column, int iValue, string Connection)
         {
-            var value = await Task.Run<bool>(() =>
+            try
             {
-                try
+                string Query = "Delete From  " + table + " Where " + column + " = @" + column + "";
+                using (SqlConnection con = new SqlConnection(Connection))
                 {
-                    string Query = "Delete From  " + table + " Where " + column + " = @" + column + "";
-                    using (SqlConnection con = new SqlConnection(Connection))
+                    using (SqlCommand cmd = new SqlCommand(Query, con))
                     {
-                        using (SqlCommand cmd = new SqlCommand(Query, con))
-                        {
-                            cmd.Parameters.Clear();
-                            cmd.Parameters.AddWithValue("@" + column, iValue);
-                            con.Open();
-                            cmd.ExecuteNonQuery();
-                        }
+                        cmd.Parameters.Clear();
+                        cmd.Parameters.AddWithValue("@" + column, iValue);
+                        await con.OpenAsync();
+                        await cmd.ExecuteNonQueryAsync();
                     }
-                    return true;
                 }
-                catch (Exception ex)
-                {
-                    throw ex;
-                }
-            });
-            return value;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
         }
         public static async Task<bool> DeleteAsync(string Query, string Connection)
         {
@@ -337,7 +353,7 @@ namespace AshproORM
                 string sValue = string.Empty;
                 List<KeyValuePair<dynamic, dynamic>> values = new List<KeyValuePair<dynamic, dynamic>>();
                 SqlConnection con = new SqlConnection(sConnection);
-                con.Open();
+                await con.OpenAsync();
                 try
                 {
                     foreach (DataRow data in datas.Rows)
@@ -373,7 +389,7 @@ namespace AshproORM
                             }
                             using (SqlCommand cmd = new SqlCommand(Query, con))
                             {
-                                cmd.ExecuteNonQuery();
+                                await cmd.ExecuteNonQueryAsync();
                             }
                         }
                     }
@@ -478,7 +494,25 @@ namespace AshproORM
         #endregion
 
         #region Normal Method
-        public static T GetObject<T>(string Query, string Connection)
+        public static object GetSingleData(string Query, string sConnection)
+        {
+            try
+            {
+                using (SqlConnection con = new SqlConnection(sConnection))
+                {
+                    using (SqlCommand cmd = new SqlCommand(Query, con))
+                    {
+                        con.Open();
+                        return cmd.ExecuteScalar();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+        }
+        public static T GetObjectDetails<T>(string Query, string Connection)
         {
             try
             {
@@ -518,27 +552,18 @@ namespace AshproORM
                 throw ex;
             }
         }
-        public static dynamic GetValue(string Query, string Connection)
+        public static async Task<dynamic> ValueFindMethod(string Query, string Connection)
         {
             try
             {
-                DataTable dt = new DataTable();
-                dt = GetDataTable(Query, Connection);
-                if (dt.Rows.Count > 0)
-                {
-                    return dt.Rows[0][0] == DBNull.Value ? null : dt.Rows[0][0];
-                }
-                else
-                {
-                    return null;
-                }
+                return await GetSingleDataAsync(Query, Connection);
             }
             catch (Exception ex)
             {
                 throw ex;
             }
         }
-        public static List<T> GetList<T>(string Query, string Connection)
+        public static List<T> GetListMethod<T>(string Query, string Connection)
         {
             try
             {
@@ -553,7 +578,7 @@ namespace AshproORM
                 throw ex;
             }
         }
-        public static List<string> GetStringList(string Query, string Connection)
+        public static List<string> GetStringListMethod(string Query, string Connection)
         {
             try
             {
@@ -571,7 +596,7 @@ namespace AshproORM
                 throw ex;
             }
         }
-        public static bool DatabaseExecution(string Query, string Connection)
+        public static bool DatabaseMethod(string Query, string Connection)
         {
             if (Query == string.Empty)
             {
@@ -600,7 +625,7 @@ namespace AshproORM
             {
                 foreach (object data in datas)
                 {
-                    InsertToDatabase(data, table, Connection);
+                    InsertToDatabaseObj(data, table, Connection);
                 }
                 return true;
             }
@@ -609,7 +634,7 @@ namespace AshproORM
                 throw ex;
             }
         }
-        public static bool InsertToDatabase(object data, string table, string Connection)
+        public static bool InsertToDatabaseObj(object data, string table, string Connection)
         {
             try
             {
@@ -664,7 +689,7 @@ namespace AshproORM
                 throw ex;
             }
         }
-        public static bool UpdateDatabase(List<object> datas, string table, string column, string Connection)
+        public static bool UpdateToDatabase(List<object> datas, string table, string column, string Connection)
         {
             try
             {
@@ -679,7 +704,7 @@ namespace AshproORM
                             break;
                         }
                     }
-                    UpdateDatabase(data, table, column, iValue, Connection);
+                    UpdateToDatabaseObj(data, table, column, iValue, Connection);
                 }
                 return true;
             }
@@ -688,7 +713,7 @@ namespace AshproORM
                 throw ex;
             }
         }
-        public static bool UpdateDatabase(object data, string table, string column, int iValue, string Connection)
+        public static bool UpdateToDatabaseObj(object data, string table, string column, int iValue, string Connection)
         {
             try
             {
@@ -764,7 +789,7 @@ namespace AshproORM
                 throw ex;
             }
         }
-        public static bool DeleteFromDatabase(string Query, string Connection)
+        public static bool DeleteMethod(string Query, string Connection)
         {
             try
             {
@@ -887,7 +912,7 @@ namespace AshproORM
                                     int? iVal = x.GetValue(obj, null).ToInt32();
                                     if (iVal == sVal)
                                     {
-                                        InsertToDatabase(obj, sTable, sConnection);
+                                        InsertToDatabaseObj(obj, sTable, sConnection);
                                         break;
                                     }
                                 }
@@ -914,7 +939,7 @@ namespace AshproORM
                                     int? iVal = x.GetValue(obj, null).ToInt32();
                                     if (iVal == sVal)
                                     {
-                                        UpdateDatabase(obj, sTable, sColumn, sVal.ToInt32(), sConnection);
+                                        UpdateToDatabaseObj(obj, sTable, sColumn, sVal.ToInt32(), sConnection);
                                         break;
                                     }
                                 }
@@ -1710,14 +1735,14 @@ namespace AshproORM
         #region Public Method BySP
 
         #region Normal
-        public static bool InsertToDatabase_SP(List<object> entities, string sStoredProceedure, string Connection)
+        public static bool InsertMethod_SP(List<object> entities, string sStoredProceedure, string Connection)
         {
             bool result = false;
             try
             {
                 foreach (object data in entities)
                 {
-                    InsertToDatabase_SP(data, sStoredProceedure, Connection);
+                    InsertMethod_SP(data, sStoredProceedure, Connection);
                 }
                 result = true;
             }
@@ -1727,7 +1752,7 @@ namespace AshproORM
             }
             return result;
         }
-        public static bool InsertToDatabase_SP(object entity, string sStoredProceedure, string Connection)
+        public static bool InsertMethod_SP(object entity, string sStoredProceedure, string Connection)
         {
             bool result = false;
             using (SqlConnection con = new SqlConnection(Connection))
@@ -1776,7 +1801,7 @@ namespace AshproORM
             }
             return result;
         }
-        public static int InsertToDatabase_SP(object entity, DataSet ds, string sStoredProceedure, string Connection, object Secondentity = null)
+        public static int InsertMethod_SP(object entity, DataSet ds, string sStoredProceedure, string Connection, object Secondentity = null)
         {
             int? result = null;
             using (SqlConnection con = new SqlConnection(Connection))
@@ -1857,7 +1882,7 @@ namespace AshproORM
             }
             return result.toInt32();
         }
-        public static bool UpdateDatabase_SP(object entity, string sStoredProceedure, string Connection)
+        public static bool UpdateMethod_SP(object entity, string sStoredProceedure, string Connection)
         {
             bool result = false;
             int numRes = 0;
@@ -1907,13 +1932,13 @@ namespace AshproORM
             }
             return result;
         }
-        public static bool UpdateDatabase_SP(List<object> entities, string sStoredProceedure, string Connection)
+        public static bool UpdateMethod_SP(List<object> entities, string sStoredProceedure, string Connection)
         {
             try
             {
                 foreach (object data in entities)
                 {
-                    UpdateDatabase_SP(data, sStoredProceedure, Connection);
+                    UpdateMethod_SP(data, sStoredProceedure, Connection);
                 }
                 return true;
             }
@@ -1922,7 +1947,7 @@ namespace AshproORM
                 throw ex;
             }
         }
-        public static bool UpdateDatabase_SP(List<object> newDatas, List<object> oldDatas, string sTable, string sColumn, string sConnection)
+        public static bool UpdateMethod_SP(List<object> newDatas, List<object> oldDatas, string sTable, string sColumn, string sConnection)
         {
             List<Common> newList = new List<Common>();
             List<Common> oldList = new List<Common>();
@@ -1937,7 +1962,7 @@ namespace AshproORM
                         bool included = newList.Any(x => x.id == item.id);
                         if (!included)
                         {
-                            DeleteDatabase_SP(item.id, "spDelete" + sTable, sConnection);
+                            DeleteMethod_SP(item.id, "spDelete" + sTable, sConnection);
                         }
                     }
                 }
@@ -1963,7 +1988,7 @@ namespace AshproORM
                                     int? iVal = x.GetValue(obj, null).ToInt32();
                                     if (iVal == sVal)
                                     {
-                                        InsertToDatabase_SP(obj, "spInsert" + sTable, sConnection);
+                                        InsertMethod_SP(obj, "spInsert" + sTable, sConnection);
                                         break;
                                     }
                                 }
@@ -1991,7 +2016,7 @@ namespace AshproORM
                                     int? iVal = x.GetValue(obj, null).ToInt32();
                                     if (iVal == sVal)
                                     {
-                                        UpdateDatabase_SP(obj, "spUpdate" + sTable, sConnection);
+                                        UpdateMethod_SP(obj, "spUpdate" + sTable, sConnection);
                                     }
                                 }
                                 break;
@@ -2006,7 +2031,7 @@ namespace AshproORM
             }
             return true;
         }
-        public static bool DeleteDatabase_SP(object entity, string sStoredProceedure, string Connection)
+        public static bool DeleteMethod_SP(object entity, string sStoredProceedure, string Connection)
         {
             bool result = false;
             int numRes = 0;
@@ -2061,7 +2086,7 @@ namespace AshproORM
                 throw ex;
             }
         }
-        public static DataTable GetDataTableWithParameter_SP(string sStoredProceedure, string Value, string Connection)
+        public static DataTable GetDataTableWithIdParameter_SP(string sStoredProceedure, string Value, string Connection)
         {
             System.Threading.Thread.CurrentThread.CurrentCulture = System.Threading.Thread.CurrentThread.CurrentUICulture = new System.Globalization.CultureInfo("en");
             try
@@ -2086,7 +2111,7 @@ namespace AshproORM
                 throw ex;
             }
         }
-        public static DataTable GetDataTableWithParameter_SP(string sStoredProceedure, object entity, string Connection)
+        public static DataTable GetDataTableWithIdParameter_SP(string sStoredProceedure, object entity, string Connection)
         {
             System.Threading.Thread.CurrentThread.CurrentCulture = System.Threading.Thread.CurrentThread.CurrentUICulture = new System.Globalization.CultureInfo("en");
             try
@@ -2136,13 +2161,13 @@ namespace AshproORM
                 throw ex;
             }
         }
-        public static List<T> GetListWithParameter_SP<T>(string sStoredProceedure, string Value, string Connection)
+        public static List<T> GetList_SP<T>(string sStoredProceedure, string Value, string Connection)
         {
             try
             {
                 List<T> dsList = new List<T>();
                 DataTable dt = new DataTable();
-                dt = GetDataTableWithParameter_SP(sStoredProceedure, Value, Connection);
+                dt = GetDataTableWithIdParameter_SP(sStoredProceedure, Value, Connection);
                 dsList = ConvertDataTable<T>(dt);
                 return dsList;
             }
@@ -2151,13 +2176,13 @@ namespace AshproORM
                 throw ex;
             }
         }
-        public static List<T> GetListWithParameter_SP<T>(string sStoredProceedure, object entity, string Connection)
+        public static List<T> GetList_SP<T>(string sStoredProceedure, object entity, string Connection)
         {
             try
             {
                 List<T> dsList = new List<T>();
                 DataTable dt = new DataTable();
-                dt = GetDataTableWithParameter_SP(sStoredProceedure, entity, Connection);
+                dt = GetDataTableWithIdParameter_SP(sStoredProceedure, entity, Connection);
                 dsList = ConvertDataTable<T>(dt);
                 return dsList;
             }
@@ -2166,14 +2191,14 @@ namespace AshproORM
                 throw ex;
             }
         }
-        public static T GetObjectWithparameter_SP<T>(string sStoredProceedure, string Value, string Connection)
+        public static T GetObject_SP<T>(string sStoredProceedure, string Value, string Connection)
         {
             try
             {
                 Type temp = typeof(T);
                 T obj = Activator.CreateInstance<T>();
                 DataTable dt = new DataTable();
-                dt = GetDataTableWithParameter_SP(sStoredProceedure, Value, Connection);
+                dt = GetDataTableWithIdParameter_SP(sStoredProceedure, Value, Connection);
                 if (dt.Rows.Count > 0)
                 {
                     obj = GetItem<T>(dt.Rows[0]);
@@ -2192,7 +2217,7 @@ namespace AshproORM
                 Type temp = typeof(T);
                 T obj = Activator.CreateInstance<T>();
                 DataTable dt = new DataTable();
-                dt = GetDataTableWithParameter_SP(sStoredProceedure, entity, Connection);
+                dt = GetDataTableWithIdParameter_SP(sStoredProceedure, entity, Connection);
                 if (dt.Rows.Count > 0)
                 {
                     obj = GetItem<T>(dt.Rows[0]);
@@ -2238,7 +2263,7 @@ namespace AshproORM
         public static string GetDataWithParameter_SP(string sStoredProceedure, object entity, string Connection)
         {
             DataTable dt = new DataTable();
-            dt = GetDataTableWithParameter_SP(sStoredProceedure, entity, Connection);
+            dt = GetDataTableWithIdParameter_SP(sStoredProceedure, entity, Connection);
             if (dt.Rows.Count > 0)
             {
                 return dt.Rows[0][0].ToString();
@@ -2343,171 +2368,80 @@ namespace AshproORM
         }
         public static async Task<bool> InsertAsync_SP(object entity, string sStoredProceedure, string Connection)
         {
-            var value = await Task.Run<bool>(() =>
+            try
             {
-                try
+                bool result = false;
+                using (SqlConnection con = new SqlConnection(Connection))
                 {
-                    bool result = false;
-                    using (SqlConnection con = new SqlConnection(Connection))
+                    using (SqlCommand cmd = new SqlCommand(sStoredProceedure, con))
                     {
-                        using (SqlCommand cmd = new SqlCommand(sStoredProceedure, con))
+                        cmd.CommandType = CommandType.StoredProcedure;
+                        try
                         {
-                            cmd.CommandType = CommandType.StoredProcedure;
-                            try
+                            foreach (var item in entity.GetType().GetProperties())
                             {
-                                foreach (var item in entity.GetType().GetProperties())
+                                if (item.GetValue(entity, null) != null)
                                 {
-                                    if (item.GetValue(entity, null) != null)
+                                    if (item.PropertyType.Name == "Nullable`1" && item.GetValue(entity, null).ToString() == "0")
                                     {
-                                        if (item.PropertyType.Name == "Nullable`1" && item.GetValue(entity, null).ToString() == "0")
-                                        {
-                                            continue;
-                                        }
-                                        if (item.PropertyType.Name == "Byte[]")
-                                        {
-                                            cmd.Parameters.AddWithValue(item.Name, (byte[])(item.GetValue(entity, null)));
-                                        }
-                                        else if (item.PropertyType.Name == "DateTime")
-                                        {
-                                            cmd.Parameters.AddWithValue("@" + item.Name, GetDate((DateTime)(item.GetValue(entity, null))));
-                                        }
-                                        else
-                                            cmd.Parameters.AddWithValue(item.Name, item.GetValue(entity, null).ToString());
+                                        continue;
                                     }
-                                }
-                                con.Open();
-                                int numRes = cmd.ExecuteNonQuery();
-                                if (numRes > 0)
-                                {
-                                    result = true;
-                                }
-                                else
-                                {
-                                    result = false;
+                                    if (item.PropertyType.Name == "Byte[]")
+                                    {
+                                        cmd.Parameters.AddWithValue(item.Name, (byte[])(item.GetValue(entity, null)));
+                                    }
+                                    else if (item.PropertyType.Name == "DateTime")
+                                    {
+                                        cmd.Parameters.AddWithValue("@" + item.Name, GetDate((DateTime)(item.GetValue(entity, null))));
+                                    }
+                                    else
+                                        cmd.Parameters.AddWithValue(item.Name, item.GetValue(entity, null).ToString());
                                 }
                             }
-                            catch (Exception ex)
+                            await con.OpenAsync();
+                            int numRes = await cmd.ExecuteNonQueryAsync();
+                            if (numRes > 0)
                             {
-                                throw ex;
+                                result = true;
+                            }
+                            else
+                            {
+                                result = false;
                             }
                         }
+                        catch (Exception ex)
+                        {
+                            throw ex;
+                        }
                     }
-                    return result;
                 }
-                catch (Exception ex)
-                {
-                    throw ex;
-                }
-            });
-            return value;
+                return result;
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
         }
         public static async Task<int> InsertAsync_SP(object entity, DataSet ds, string sStoredProceedure, string Connection, object Secondentity = null)
         {
-            var value = await Task.Run<int>(() =>
+            try
             {
-                try
+                int? result = null;
+                using (SqlConnection con = new SqlConnection(Connection))
                 {
-                    int? result = null;
-                    using (SqlConnection con = new SqlConnection(Connection))
+                    using (SqlCommand cmd = new SqlCommand(sStoredProceedure, con))
                     {
-                        using (SqlCommand cmd = new SqlCommand(sStoredProceedure, con))
+                        cmd.CommandType = CommandType.StoredProcedure;
+                        try
                         {
-                            cmd.CommandType = CommandType.StoredProcedure;
-                            try
+                            if (ds != null)
                             {
-                                if (ds != null)
+                                foreach (DataTable dt in ds.Tables)
                                 {
-                                    foreach (DataTable dt in ds.Tables)
-                                    {
-                                        cmd.Parameters.AddWithValue("@" + dt.TableName, dt);
-                                    }
+                                    cmd.Parameters.AddWithValue("@" + dt.TableName, dt);
                                 }
-                                if (entity != null)
-                                {
-                                    foreach (var item in entity.GetType().GetProperties())
-                                    {
-                                        if (item.GetValue(entity, null) != null)
-                                        {
-                                            if (item.PropertyType.Name == "Nullable`1" && item.GetValue(entity, null).ToString() == "0")
-                                            {
-                                                continue;
-                                            }
-                                            if (item.PropertyType.Name == "Byte[]")
-                                            {
-                                                cmd.Parameters.AddWithValue(item.Name, (byte[])(item.GetValue(entity, null)));
-                                            }
-                                            else if (item.PropertyType.Name == "DateTime")
-                                            {
-                                                cmd.Parameters.AddWithValue("@" + item.Name, GetDate((DateTime)(item.GetValue(entity, null))));
-                                            }
-                                            else
-                                                cmd.Parameters.AddWithValue(item.Name, item.GetValue(entity, null).ToString());
-                                        }
-                                    }
-                                }
-                                if (Secondentity != null)
-                                {
-                                    foreach (var item in Secondentity.GetType().GetProperties())
-                                    {
-                                        if (item.GetValue(Secondentity, null) != null)
-                                        {
-                                            if (item.PropertyType.Name == "Nullable`1" && item.GetValue(Secondentity, null).ToString() == "0")
-                                            {
-                                                continue;
-                                            }
-                                            if (item.PropertyType.Name == "Byte[]")
-                                            {
-                                                cmd.Parameters.AddWithValue(item.Name, (byte[])(item.GetValue(Secondentity, null)));
-                                            }
-                                            else if (item.PropertyType.Name == "DateTime")
-                                            {
-                                                cmd.Parameters.AddWithValue("@" + item.Name, GetDate((DateTime)(item.GetValue(Secondentity, null))));
-                                            }
-                                            else
-                                                cmd.Parameters.AddWithValue(item.Name, item.GetValue(Secondentity, null).ToString());
-                                        }
-                                    }
-                                }
-                                cmd.Parameters.Add("@return", SqlDbType.Int);
-                                cmd.Parameters.Add("@errMessage", SqlDbType.Char, 500);
-                                cmd.Parameters["@return"].Direction = ParameterDirection.Output;
-                                cmd.Parameters["@errMessage"].Direction = ParameterDirection.Output;
-                                con.Open();
-                                cmd.CommandTimeout = 0;
-                                cmd.ExecuteNonQuery();
-                                string message = cmd.Parameters["@errMessage"].Value.ToString2();
-                                result = cmd.Parameters["@return"].Value.ToString2().ToInt32();
                             }
-                            catch (Exception ex)
-                            {
-                                throw ex;
-                            }
-                        }
-                    }
-                    return result.toInt32();
-
-                }
-                catch (Exception ex)
-                {
-                    throw ex;
-                }
-            });
-            return value;
-        }
-        public static async Task<bool> UpdateAsync_SP(object entity, string sStoredProceedure, string Connection)
-        {
-            var value = await Task.Run<bool>(() =>
-            {
-                try
-                {
-                    bool result = false;
-                    int numRes = 0;
-                    using (SqlConnection con = new SqlConnection(Connection))
-                    {
-                        using (SqlCommand cmd = new SqlCommand(sStoredProceedure, con))
-                        {
-                            cmd.CommandType = CommandType.StoredProcedure;
-                            try
+                            if (entity != null)
                             {
                                 foreach (var item in entity.GetType().GetProperties())
                                 {
@@ -2523,37 +2457,118 @@ namespace AshproORM
                                         }
                                         else if (item.PropertyType.Name == "DateTime")
                                         {
-                                            cmd.Parameters.AddWithValue("@" + item.Name, GetDate((DateTime)(item.GetValue(entity, null))));
+                                            string sDate = GetDate((DateTime)(item.GetValue(entity, null)));
+                                            cmd.Parameters.AddWithValue("@" + item.Name, sDate);
                                         }
                                         else
                                             cmd.Parameters.AddWithValue(item.Name, item.GetValue(entity, null).ToString());
                                     }
                                 }
-                                con.Open();
-                                numRes = cmd.ExecuteNonQuery();
                             }
-                            catch (Exception ex)
+                            if (Secondentity != null)
                             {
-                                throw ex;
+                                foreach (var item in Secondentity.GetType().GetProperties())
+                                {
+                                    if (item.GetValue(Secondentity, null) != null)
+                                    {
+                                        if (item.PropertyType.Name == "Nullable`1" && item.GetValue(Secondentity, null).ToString() == "0")
+                                        {
+                                            continue;
+                                        }
+                                        if (item.PropertyType.Name == "Byte[]")
+                                        {
+                                            cmd.Parameters.AddWithValue(item.Name, (byte[])(item.GetValue(Secondentity, null)));
+                                        }
+                                        else if (item.PropertyType.Name == "DateTime")
+                                        {
+                                            string sDate = GetDate((DateTime)(item.GetValue(Secondentity, null)));
+                                            cmd.Parameters.AddWithValue("@" + item.Name, sDate);
+                                        }
+                                        else
+                                            cmd.Parameters.AddWithValue(item.Name, item.GetValue(Secondentity, null).ToString());
+                                    }
+                                }
                             }
+                            cmd.Parameters.Add("@return", SqlDbType.Int);
+                            cmd.Parameters.Add("@errMessage", SqlDbType.Char, 500);
+                            cmd.Parameters["@return"].Direction = ParameterDirection.Output;
+                            cmd.Parameters["@errMessage"].Direction = ParameterDirection.Output;
+                            await con.OpenAsync();
+                            cmd.CommandTimeout = 0;
+                            await cmd.ExecuteNonQueryAsync();
+                            string message = cmd.Parameters["@errMessage"].Value.ToString2();
+                            result = cmd.Parameters["@return"].Value.ToString2().ToInt32();
+                        }
+                        catch (Exception ex)
+                        {
+                            throw ex;
                         }
                     }
-                    if (numRes > 0)
-                    {
-                        result = true;
-                    }
-                    else
-                    {
-                        result = false;
-                    }
-                    return result;
                 }
-                catch (Exception ex)
+                return result.toInt32();
+
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+        }
+        public static async Task<bool> UpdateAsync_SP(object entity, string sStoredProceedure, string Connection)
+        {
+            try
+            {
+                bool result = false;
+                int numRes = 0;
+                using (SqlConnection con = new SqlConnection(Connection))
                 {
-                    throw ex;
+                    using (SqlCommand cmd = new SqlCommand(sStoredProceedure, con))
+                    {
+                        cmd.CommandType = CommandType.StoredProcedure;
+                        try
+                        {
+                            foreach (var item in entity.GetType().GetProperties())
+                            {
+                                if (item.GetValue(entity, null) != null)
+                                {
+                                    if (item.PropertyType.Name == "Nullable`1" && item.GetValue(entity, null).ToString() == "0")
+                                    {
+                                        continue;
+                                    }
+                                    if (item.PropertyType.Name == "Byte[]")
+                                    {
+                                        cmd.Parameters.AddWithValue(item.Name, (byte[])(item.GetValue(entity, null)));
+                                    }
+                                    else if (item.PropertyType.Name == "DateTime")
+                                    {
+                                        cmd.Parameters.AddWithValue("@" + item.Name, GetDate((DateTime)(item.GetValue(entity, null))));
+                                    }
+                                    else
+                                        cmd.Parameters.AddWithValue(item.Name, item.GetValue(entity, null).ToString());
+                                }
+                            }
+                            await con.OpenAsync();
+                            numRes = await cmd.ExecuteNonQueryAsync();
+                        }
+                        catch (Exception ex)
+                        {
+                            throw ex;
+                        }
+                    }
                 }
-            });
-            return value;
+                if (numRes > 0)
+                {
+                    result = true;
+                }
+                else
+                {
+                    result = false;
+                }
+                return result;
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
         }
         public static async Task<bool> UpdateAsync_SP(List<object> entities, string sStoredProceedure, string Connection)
         {
@@ -2656,49 +2671,46 @@ namespace AshproORM
         }
         public static async Task<bool> DeleteAsync_SP(object entity, string sStoredProceedure, string Connection)
         {
-            var value = await Task.Run<bool>(() =>
+            try
             {
-                try
+                bool result = false;
+                int numRes = 0;
+                using (SqlConnection con = new SqlConnection(Connection))
                 {
-                    bool result = false;
-                    int numRes = 0;
-                    using (SqlConnection con = new SqlConnection(Connection))
+                    using (SqlCommand cmd = new SqlCommand(sStoredProceedure, con))
                     {
-                        using (SqlCommand cmd = new SqlCommand(sStoredProceedure, con))
+                        cmd.CommandType = CommandType.StoredProcedure;
+                        try
                         {
-                            cmd.CommandType = CommandType.StoredProcedure;
-                            try
-                            {
-                                cmd.Parameters.AddWithValue("Id", entity.ToInt32());
-                                con.Open();
-                                numRes = cmd.ExecuteNonQuery();
-                            }
-                            catch (Exception ex)
-                            {
-                                throw ex;
-                            }
+                            cmd.Parameters.AddWithValue("Id", entity.ToInt32());
+                            await con.OpenAsync();
+                            numRes = await cmd.ExecuteNonQueryAsync();
+                        }
+                        catch (Exception ex)
+                        {
+                            throw ex;
                         }
                     }
-                    if (numRes > 0)
-                    {
-                        result = true;
-                    }
-                    else
-                    {
-                        result = false;
-                    }
-                    return result;
                 }
-                catch (Exception ex)
+                if (numRes > 0)
                 {
-                    throw ex;
+                    result = true;
                 }
-            });
-            return value;
+                else
+                {
+                    result = false;
+                }
+                return result;
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+
         }
         public static async Task<DataTable> GetDataTableAsync_SP(string sStoredProceedure, string Connection)
         {
-            var value = await Task.Run<DataTable>(() =>
+            var value = await Task<DataTable>.Factory.StartNew(() =>
             {
                 try
                 {
@@ -2706,12 +2718,14 @@ namespace AshproORM
                     DataTable dt = new DataTable();
                     using (SqlConnection con = new SqlConnection(Connection))
                     {
-                        using (SqlCommand cmd = new SqlCommand(sStoredProceedure, con))
+                        using (SqlCommand cmd = new SqlCommand())
                         {
+                            cmd.Connection = con;
                             cmd.CommandType = CommandType.StoredProcedure;
-                            using (SqlDataAdapter da = new SqlDataAdapter(cmd))
+                            cmd.CommandText = sStoredProceedure;
+                            using (SqlDataAdapter sdr = new SqlDataAdapter(cmd))
                             {
-                                da.Fill(dt);
+                                sdr.Fill(dt);
                             }
                         }
                     }
@@ -2724,9 +2738,9 @@ namespace AshproORM
             });
             return value;
         }
-        public static async Task<DataTable> GetDataTableWithParameterAsync_SP(string sStoredProceedure, string Value, string Connection)
+        public static async Task<DataTable> GetDataTableWithIdParameterAsync_SP(string sStoredProceedure, string Value, string Connection)
         {
-            var value = await Task.Run<DataTable>(() =>
+            var value = await Task<DataTable>.Factory.StartNew(() =>
             {
                 try
                 {
@@ -2753,9 +2767,9 @@ namespace AshproORM
             });
             return value;
         }
-        public static async Task<DataTable> GetDataTableWithParameterAsync_SP(string sStoredProceedure, object entity, string Connection)
+        public static async Task<DataTable> GetDataTableWithIdParameterAsync_SP(string sStoredProceedure, object entity, string Connection)
         {
-            var value = await Task.Run<DataTable>(() =>
+            var value = await Task<DataTable>.Factory.StartNew(() =>
             {
                 try
                 {
@@ -2763,9 +2777,9 @@ namespace AshproORM
                     DataTable dt = new DataTable();
                     using (SqlConnection con = new SqlConnection(Connection))
                     {
-                        using (SqlCommand cmd = new SqlCommand(sStoredProceedure, con))
+                        using (SqlCommand cmd = new SqlCommand())
                         {
-                            cmd.CommandType = CommandType.StoredProcedure;
+                            cmd.Connection = con;
                             if (entity != null)
                             {
                                 foreach (var item in entity.GetType().GetProperties())
@@ -2776,10 +2790,12 @@ namespace AshproORM
                                     }
                                 }
                             }
+                            cmd.CommandText = sStoredProceedure;
                             cmd.CommandTimeout = 0;
-                            using (SqlDataAdapter da = new SqlDataAdapter(cmd))
+                            cmd.CommandType = CommandType.StoredProcedure;
+                            using (SqlDataAdapter sdr = new SqlDataAdapter(cmd))
                             {
-                                da.Fill(dt);
+                                sdr.Fill(dt);
                             }
                         }
                     }
@@ -2813,7 +2829,7 @@ namespace AshproORM
             {
                 List<T> dsList = new List<T>();
                 DataTable dt = new DataTable();
-                dt = await GetDataTableWithParameterAsync_SP(sStoredProceedure, Value, Connection);
+                dt = await GetDataTableWithIdParameterAsync_SP(sStoredProceedure, Value, Connection);
                 dsList = await ConvertDataTableAsync<T>(dt);
                 return dsList;
             }
@@ -2828,7 +2844,7 @@ namespace AshproORM
             {
                 List<T> dsList = new List<T>();
                 DataTable dt = new DataTable();
-                dt = await GetDataTableWithParameterAsync_SP(sStoredProceedure, entity, Connection);
+                dt = await GetDataTableWithIdParameterAsync_SP(sStoredProceedure, entity, Connection);
                 dsList = await ConvertDataTableAsync<T>(dt);
                 return dsList;
             }
@@ -2837,14 +2853,14 @@ namespace AshproORM
                 throw ex;
             }
         }
-        public static async Task<T> GetAsyncWithparameter_SP<T>(string sStoredProceedure, string Value, string Connection)
+        public static async Task<T> GetAsync_SP<T>(string sStoredProceedure, string Value, string Connection)
         {
             try
             {
                 Type temp = typeof(T);
                 T obj = Activator.CreateInstance<T>();
                 DataTable dt = new DataTable();
-                dt = await GetDataTableWithParameterAsync_SP(sStoredProceedure, Value, Connection);
+                dt = await GetDataTableWithIdParameterAsync_SP(sStoredProceedure, Value, Connection);
                 if (dt.Rows.Count > 0)
                 {
                     obj = await GetItemAsync<T>(dt.Rows[0]);
@@ -2863,7 +2879,7 @@ namespace AshproORM
                 Type temp = typeof(T);
                 T obj = Activator.CreateInstance<T>();
                 DataTable dt = new DataTable();
-                dt = await GetDataTableWithParameterAsync_SP(sStoredProceedure, entity, Connection);
+                dt = await GetDataTableWithIdParameterAsync_SP(sStoredProceedure, entity, Connection);
                 if (dt.Rows.Count > 0)
                 {
                     obj = await GetItemAsync<T>(dt.Rows[0]);
@@ -2895,83 +2911,108 @@ namespace AshproORM
         }
         public static async Task<string> GetDataAsync_SP(string sStoredProceedure, string Connection)
         {
-            DataTable dt = new DataTable();
-            dt = await GetDataTableAsync_SP(sStoredProceedure, Connection);
-            if (dt.Rows.Count > 0)
+            try
             {
-                return dt.Rows[0][0].ToString();
+                System.Threading.Thread.CurrentThread.CurrentCulture = System.Threading.Thread.CurrentThread.CurrentUICulture = new System.Globalization.CultureInfo("en");
+                using (SqlConnection con = new SqlConnection(Connection))
+                {
+                    using (SqlCommand cmd = new SqlCommand())
+                    {
+                        cmd.Connection = con;
+                        cmd.CommandType = CommandType.StoredProcedure;
+                        cmd.CommandText = sStoredProceedure;
+                        con.Open();
+                        return (await cmd.ExecuteScalarAsync()).ToString();
+                    }
+                }
             }
-            else
+            catch (Exception ex)
             {
-                return null;
+                throw ex;
             }
         }
-        public static async Task<string> GetDataWithParameterAsync_SP(string sStoredProceedure, object entity, string Connection)
+        public static async Task<object> GetDataWithParameterAsync_SP(string sStoredProceedure, object entity, string Connection)
         {
-            DataTable dt = new DataTable();
-            dt = await GetDataTableWithParameterAsync_SP(sStoredProceedure, entity, Connection);
-            if (dt.Rows.Count > 0)
+            try
             {
-                return dt.Rows[0][0].ToString();
+                System.Threading.Thread.CurrentThread.CurrentCulture = System.Threading.Thread.CurrentThread.CurrentUICulture = new System.Globalization.CultureInfo("en");
+                using (SqlConnection con = new SqlConnection(Connection))
+                {
+                    using (SqlCommand cmd = new SqlCommand())
+                    {
+                        cmd.Connection = con;
+                        if (entity != null)
+                        {
+                            foreach (var item in entity.GetType().GetProperties())
+                            {
+                                if (item.GetValue(entity, null) != null)
+                                {
+                                    cmd.Parameters.AddWithValue(item.Name, item.GetValue(entity, null).ToString());
+                                }
+                            }
+                        }
+                        cmd.CommandText = sStoredProceedure;
+                        cmd.CommandTimeout = 0;
+                        cmd.CommandType = CommandType.StoredProcedure;
+                        con.Open();
+                        return (await cmd.ExecuteScalarAsync());
+                    }
+                }
             }
-            else
+            catch (Exception ex)
             {
-                return null;
+                throw ex;
             }
         }
         public static async Task<bool> DatabaseExecutionAsync_SP(string sStoredProceedure, string Connection, Object entity = null)
         {
-            var value = await Task.Run<bool>(() =>
+            try
             {
-                try
+                bool result = false;
+                using (SqlConnection con = new SqlConnection(Connection))
                 {
-                    bool result = false;
-                    using (SqlConnection con = new SqlConnection(Connection))
+                    using (SqlCommand cmd = new SqlCommand(sStoredProceedure, con))
                     {
-                        using (SqlCommand cmd = new SqlCommand(sStoredProceedure, con))
+                        cmd.CommandType = CommandType.StoredProcedure;
+                        if (entity != null)
                         {
-                            cmd.CommandType = CommandType.StoredProcedure;
-                            if (entity != null)
+                            foreach (var item in entity.GetType().GetProperties())
                             {
-                                foreach (var item in entity.GetType().GetProperties())
+                                if (item.GetValue(entity, null) != null)
                                 {
-                                    if (item.GetValue(entity, null) != null)
-                                    {
-                                        cmd.Parameters.AddWithValue(item.Name, item.GetValue(entity, null).ToString());
-                                    }
+                                    cmd.Parameters.AddWithValue(item.Name, item.GetValue(entity, null).ToString());
                                 }
-                            }
-                            try
-                            {
-                                con.Open();
-                                int numRes = cmd.ExecuteNonQuery();
-                                if (numRes > 0)
-                                {
-                                    result = true;
-                                }
-                                else
-                                {
-                                    result = false;
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                throw ex;
                             }
                         }
+                        try
+                        {
+                            await con.OpenAsync();
+                            int numRes = await cmd.ExecuteNonQueryAsync();
+                            if (numRes > 0)
+                            {
+                                result = true;
+                            }
+                            else
+                            {
+                                result = false;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            throw ex;
+                        }
                     }
-                    return result;
                 }
-                catch (Exception ex)
-                {
-                    throw ex;
-                }
-            });
-            return value;
+                return result;
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
         }
         public static async Task<DataSet> GetDataSetAsync_SP(string sStoredProceedure, object entity, string Connection)
         {
-            var value = await Task.Run<DataSet>(() =>
+            var value = await Task<DataSet>.Factory.StartNew(() =>
             {
                 try
                 {
