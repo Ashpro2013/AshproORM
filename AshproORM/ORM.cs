@@ -1109,7 +1109,7 @@ namespace AshproORM
                                     else if (pro.PropertyType.Name == "Decimal")
                                     {
                                         if (dr[column.ColumnName].ToString() != string.Empty)
-                                            pro.SetValue(obj, dr[column.ColumnName].ToString().ToDecimal(), null);
+                                            pro.SetValue(obj, dr[column.ColumnName].toDecimal(), null);
                                     }
                                     else if (pro.PropertyType.Name == "Nullable`1")
                                     {
@@ -1138,7 +1138,7 @@ namespace AshproORM
                                         {
                                             if (dr[column.ColumnName].ToString() != string.Empty)
                                             {
-                                                pro.SetValue(obj, dr[column.ColumnName].ToString().ToDecimal(), null);
+                                                pro.SetValue(obj, dr[column.ColumnName].toDecimal(), null);
                                             }
                                         }
                                     }
@@ -1525,7 +1525,7 @@ namespace AshproORM
                                 else if (pro.PropertyType.Name == "Decimal")
                                 {
                                     if (dr[column.ColumnName].ToString() != string.Empty)
-                                        pro.SetValue(obj, dr[column.ColumnName].ToString().ToDecimal(), null);
+                                        pro.SetValue(obj, dr[column.ColumnName].toDecimal(), null);
                                 }
                                 else if (pro.PropertyType.Name == "Nullable`1")
                                 {
@@ -1554,7 +1554,7 @@ namespace AshproORM
                                     {
                                         if (dr[column.ColumnName].ToString() != string.Empty)
                                         {
-                                            pro.SetValue(obj, dr[column.ColumnName].ToString().ToDecimal(), null);
+                                            pro.SetValue(obj, dr[column.ColumnName].toDecimal(), null);
                                         }
                                     }
                                 }
