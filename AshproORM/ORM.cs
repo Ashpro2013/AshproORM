@@ -1181,7 +1181,7 @@ namespace AshproORM
             {
                 try
                 {
-                    string? query = "";
+                    string query = "";
                     query += "INSERT INTO " + table + " ( ";
                     foreach (var item in values)
                     {
