@@ -1801,9 +1801,9 @@ namespace AshproORM
             }
             return result;
         }
-        public static int InsertMethod_SP(object entity, DataSet ds, string sStoredProceedure, string Connection, object Secondentity = null)
+        public static DBOutput InsertMethod_SP(object entity, DataSet ds, string sStoredProceedure, string Connection, object Secondentity = null)
         {
-            int? result = null;
+            DBOutput dBOutput = new DBOutput();
             using (SqlConnection con = new SqlConnection(Connection))
             {
                 using (SqlCommand cmd = new SqlCommand(sStoredProceedure, con))
@@ -1871,8 +1871,8 @@ namespace AshproORM
                         con.Open();
                         cmd.CommandTimeout = 0;
                         cmd.ExecuteNonQuery();
-                        string message = cmd.Parameters["@errMessage"].Value.ToString2();
-                        result = cmd.Parameters["@return"].Value.ToString2().ToInt32();
+                        dBOutput.Message = cmd.Parameters["@errMessage"].Value.ToString2();
+                        dBOutput.Value = cmd.Parameters["@return"].Value.ToIntiger();
                     }
                     catch (Exception ex)
                     {
@@ -1880,7 +1880,7 @@ namespace AshproORM
                     }
                 }
             }
-            return result.toInt32();
+            return dBOutput;
         }
         public static bool UpdateMethod_SP(object entity, string sStoredProceedure, string Connection)
         {
@@ -2422,11 +2422,11 @@ namespace AshproORM
                 throw ex;
             }
         }
-        public static async Task<int> InsertAsync_SP(object entity, DataSet ds, string sStoredProceedure, string Connection, object Secondentity = null)
+        public static async Task<DBOutput> InsertAsync_SP(object entity, DataSet ds, string sStoredProceedure, string Connection, object Secondentity = null)
         {
             try
             {
-                int? result = null;
+                DBOutput dBOutput = new DBOutput();
                 using (SqlConnection con = new SqlConnection(Connection))
                 {
                     using (SqlCommand cmd = new SqlCommand(sStoredProceedure, con))
@@ -2496,8 +2496,8 @@ namespace AshproORM
                             await con.OpenAsync();
                             cmd.CommandTimeout = 0;
                             await cmd.ExecuteNonQueryAsync();
-                            string message = cmd.Parameters["@errMessage"].Value.ToString2();
-                            result = cmd.Parameters["@return"].Value.ToString2().ToInt32();
+                            dBOutput.Message = cmd.Parameters["@errMessage"].Value.ToString2();
+                            dBOutput.Value = cmd.Parameters["@return"].Value.ToIntiger();
                         }
                         catch (Exception ex)
                         {
@@ -2505,8 +2505,7 @@ namespace AshproORM
                         }
                     }
                 }
-                return result.toInt32();
-
+                return dBOutput;
             }
             catch (Exception ex)
             {
