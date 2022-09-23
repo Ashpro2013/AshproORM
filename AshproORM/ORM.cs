@@ -7,54 +7,32 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
+using System.Data.Common;
+using System.Collections;
 
 
 namespace AshproORM
 {
-
     public class ORM
     {
 
         #region Public Method
 
         #region Async Method
-        public static async Task<dynamic> GetSingleDataAsync(string Query, string sConnection)
+        public static async Task<bool> BulkCopyAsync(string sTable, DataTable dt, string sConnection, bool isIdentity = true)
         {
-            try
+            var value = await Task<bool>.Factory.StartNew(() =>
             {
-                using (SqlConnection con = new SqlConnection(sConnection))
-                {
-                    using (SqlCommand cmd = new SqlCommand(Query, con))
-                    {
-                        con.Open();
-                        return await cmd.ExecuteScalarAsync();
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                throw ex;
-            }
-        }
-        public static async Task<DataTable> GetDataTableAsync(string Query, string sConnection)
-        {
-            var value = await Task<DataTable>.Factory.StartNew(() =>
-            {
+
                 try
                 {
-                    DataTable dt = new DataTable();
-                    using (SqlConnection con = new SqlConnection(sConnection))
+                    SqlBulkCopyOptions sqlBulk = isIdentity ? SqlBulkCopyOptions.KeepIdentity : SqlBulkCopyOptions.Default;
+                    using (SqlBulkCopy bulkData = new SqlBulkCopy(sConnection, sqlBulk))
                     {
-                        using (SqlCommand cmd = new SqlCommand(Query, con))
-                        {
-                            con.Open();
-                            using (SqlDataAdapter sdr = new SqlDataAdapter(cmd))
-                            {
-                                sdr.Fill(dt);
-                            }
-                        }
+                        bulkData.DestinationTableName = sTable;
+                        bulkData.WriteToServer(dt);
                     }
-                    return dt;
+                    return true;
                 }
                 catch (Exception ex)
                 {
@@ -63,20 +41,48 @@ namespace AshproORM
             });
             return value;
         }
-        public static async Task<T> GetAsync<T>(string Query, string Connection)
+        public static async Task<DataTable> GetDataTableAsync(string Query, string sConnection)
         {
             try
             {
-                Type temp = typeof(T);
-                T obj = Activator.CreateInstance<T>();
-                string table = obj.GetType().Name;
                 DataTable dt = new DataTable();
-                dt = await GetDataTableAsync(Query, Connection);
-                if (dt.Rows.Count > 0)
+                using (SqlConnection con = new SqlConnection(sConnection))
                 {
-                    obj = GetItem<T>(dt.Rows[0]);
+                    using (SqlCommand cmd = new SqlCommand(Query, con))
+                    {
+                        await con.OpenAsync();
+                        using (SqlDataAdapter sdr = new SqlDataAdapter(cmd))
+                        {
+                            sdr.Fill(dt);
+                        }
+                    }
                 }
-                return obj;
+                return dt;
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+        }
+        public static async Task<T> GetAsync<T>(string Query, string Connection) where T : new()
+        {
+            SqlDataReader reader = null;
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(Connection))
+                {
+                    using (SqlCommand cmd = new SqlCommand(Query, conn))
+                    {
+                        cmd.CommandType = CommandType.Text;
+
+                        await conn.OpenAsync();
+                        reader = await cmd.ExecuteReaderAsync();
+                        T list = ToSingle<T>(reader);
+                        reader.Close();
+                        reader.Dispose();
+                        return list;
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -87,15 +93,13 @@ namespace AshproORM
         {
             try
             {
-                DataTable dt = new DataTable();
-                dt = await GetDataTableAsync(Query, Connection);
-                if (dt.Rows.Count > 0)
+                using (SqlConnection con = new SqlConnection(Connection))
                 {
-                    return dt.Rows[0][0] == DBNull.Value ? null : dt.Rows[0][0];
-                }
-                else
-                {
-                    return null;
+                    using (SqlCommand cmd = new SqlCommand(Query, con))
+                    {
+                       await con.OpenAsync();
+                        return await cmd.ExecuteScalarAsync();
+                    }
                 }
             }
             catch (Exception ex)
@@ -103,8 +107,9 @@ namespace AshproORM
                 throw ex;
             }
         }
-        public static async Task<List<T>> GetListAsync<T>(string Query = null, string Connection = null)
+        public static async Task<List<T>> GetListAsync<T>(string Query = null, string Connection = null) where T : new()
         {
+            SqlDataReader reader = null;
             try
             {
                 if (!Query.ToLower().Contains("select"))
@@ -114,11 +119,19 @@ namespace AshproORM
                     string table = Query ?? obj.GetType().Name;
                     Query = "Select * From " + table;
                 }
-                List<T> dsList = new List<T>();
-                DataTable dt = new DataTable();
-                dt = await GetDataTableAsync(Query, Connection);
-                dsList = ConvertDataTable<T>(dt);
-                return dsList;
+                using (SqlConnection conn = new SqlConnection(Connection))
+                {
+                    using (SqlCommand cmd = new SqlCommand(Query, conn))
+                    {
+                        cmd.CommandType = CommandType.Text;
+                        await conn.OpenAsync();
+                        reader = await cmd.ExecuteReaderAsync();
+                        List<T> list = ToList<T>(reader);
+                        reader.Close();
+                        reader.Dispose();
+                        return list;
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -127,16 +140,22 @@ namespace AshproORM
         }
         public static async Task<List<string>> GetStringListAsync(string Query, string Connection)
         {
+            SqlDataReader reader = null;
             try
             {
-                List<string> dsList = new List<string>();
-                DataTable dt = new DataTable();
-                dt = await GetDataTableAsync(Query, Connection);
-                foreach (DataRow item in dt.Rows)
+                using (SqlConnection conn = new SqlConnection(Connection))
                 {
-                    dsList.Add(item[0].ToString());
+                    using (SqlCommand cmd = new SqlCommand(Query, conn))
+                    {
+                        cmd.CommandType = CommandType.Text;
+                        await conn.OpenAsync();
+                        reader = await cmd.ExecuteReaderAsync();
+                        List<string> list = ToList(reader);
+                        reader.Close();
+                        reader.Dispose();
+                        return list;
+                    }
                 }
-                return dsList;
             }
             catch (Exception ex)
             {
@@ -342,7 +361,6 @@ namespace AshproORM
         public static async Task<bool> DeleteAsync(string Query, string Connection)
         {
             return await DatabaseMethodAsync(Query, Connection);
-
         }
         public static async Task<bool> UpdateAsync(DataTable datas, DataTable oldDatas, string table, string sConnection)
         {
@@ -494,38 +512,41 @@ namespace AshproORM
         #endregion
 
         #region Normal Method
-        public static object GetSingleData(string Query, string sConnection)
+        public static bool BulkCopy(string sTable, DataTable dt, string sConnection, bool isIdentity = true)
         {
             try
             {
-                using (SqlConnection con = new SqlConnection(sConnection))
+                SqlBulkCopyOptions sqlBulk = isIdentity ? SqlBulkCopyOptions.KeepIdentity : SqlBulkCopyOptions.Default;
+                using (SqlBulkCopy bulkData = new SqlBulkCopy(sConnection, sqlBulk))
                 {
-                    using (SqlCommand cmd = new SqlCommand(Query, con))
-                    {
-                        con.Open();
-                        return cmd.ExecuteScalar();
-                    }
+                    bulkData.DestinationTableName = sTable;
+                    bulkData.WriteToServer(dt);
                 }
             }
             catch (Exception ex)
             {
                 throw ex;
             }
+            return true;
         }
-        public static T GetObjectDetails<T>(string Query, string Connection)
+        public static T GetObjectDetails<T>(string Query, string Connection) where T : new()
         {
+            SqlDataReader reader = null;
             try
             {
-                Type temp = typeof(T);
-                T obj = Activator.CreateInstance<T>();
-                string table = obj.GetType().Name;
-                DataTable dt = new DataTable();
-                dt = GetDataTable(Query, Connection);
-                if (dt.Rows.Count > 0)
+                using (SqlConnection conn = new SqlConnection(Connection))
                 {
-                    obj = GetItem<T>(dt.Rows[0]);
+                    using (SqlCommand cmd = new SqlCommand(Query, conn))
+                    {
+                        cmd.CommandType = CommandType.Text;
+                        conn.Open();
+                        reader = cmd.ExecuteReader();
+                        T list = ToSingle<T>(reader);
+                        reader.Close();
+                        reader.Dispose();
+                        return list;
+                    }
                 }
-                return obj;
             }
             catch (Exception ex)
             {
@@ -552,44 +573,66 @@ namespace AshproORM
                 throw ex;
             }
         }
-        public static async Task<dynamic> ValueFindMethod(string Query, string Connection)
+        public static dynamic ValueFindMethod(string Query, string Connection)
         {
             try
             {
-                return await GetSingleDataAsync(Query, Connection);
-            }
-            catch (Exception ex)
-            {
-                throw ex;
-            }
-        }
-        public static List<T> GetListMethod<T>(string Query, string Connection)
-        {
-            try
-            {
-                List<T> dsList = new List<T>();
-                DataTable dt = new DataTable();
-                dt = GetDataTable(Query, Connection);
-                dsList = ConvertDataTable<T>(dt);
-                return dsList;
-            }
-            catch (Exception ex)
-            {
-                throw ex;
-            }
-        }
-        public static List<string> GetStringListMethod(string Query, string Connection)
-        {
-            try
-            {
-                List<string> dsList = new List<string>();
-                DataTable dt = new DataTable();
-                dt = GetDataTable(Query, Connection);
-                foreach (DataRow item in dt.Rows)
+                using (SqlConnection con = new SqlConnection(Connection))
                 {
-                    dsList.Add(item[0].ToString());
+                    using (SqlCommand cmd = new SqlCommand(Query, con))
+                    {
+                        con.Open();
+                        return cmd.ExecuteScalar();
+                    }
                 }
-                return dsList;
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+        }
+        public static List<T> GetList<T>(string Query, string Connection) where T : new()
+        {
+            SqlDataReader reader = null;
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(Connection))
+                {
+                    using (SqlCommand cmd = new SqlCommand(Query, conn))
+                    {
+                        cmd.CommandType = CommandType.Text;
+                        conn.Open();
+                        reader = cmd.ExecuteReader();
+                        List<T> list = ToList<T>(reader);
+                        reader.Close();
+                        reader.Dispose();
+                        return list;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+        }
+        public static List<string> GetStringList(string Query, string Connection)
+        {
+            SqlDataReader reader = null;
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(Connection))
+                {
+                    using (SqlCommand cmd = new SqlCommand(Query, conn))
+                    {
+                        cmd.CommandType = CommandType.Text;
+                        conn.Open();
+                        reader = cmd.ExecuteReader();
+                        List<string> list = ToList(reader);
+                        reader.Close();
+                        reader.Dispose();
+                        return list;
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -1374,6 +1417,146 @@ namespace AshproORM
         #endregion
 
         #region Normal Method
+        private static List<string> ToList(SqlDataReader dataReader)
+        {
+            List<string> res = new List<string>();
+            while (dataReader.Read())
+            {
+                dynamic t = null;
+
+                for (int inc = 0; inc < dataReader.FieldCount; inc++)
+                {
+                    Type type = t.GetType();
+                    PropertyInfo prop = type.GetProperty(dataReader.GetName(inc));
+                    var val = dataReader.GetValue(inc);
+                    if (val != DBNull.Value)
+                    {
+                        prop.SetValue(t, val, null);
+                    }
+                }
+                res.Add(t);
+            }
+            return res;
+        }
+        private static List<T> ToList<T>(SqlDataReader dataReader) where T : new()
+        {
+            string sval = null;
+            try
+            {
+                List<T> res = new List<T>();
+                while (dataReader.Read())
+                {
+                    T t = new T();
+
+                    for (int inc = 0; inc < dataReader.FieldCount; inc++)
+                    {
+                        Type type = t.GetType();
+                        PropertyInfo prop = type.GetProperty(dataReader.GetName(inc));
+                        var val = dataReader.GetValue(inc);
+                        sval = val.ToString();
+                        if (val != DBNull.Value)
+                        {
+                            try
+                            {
+                                prop.SetValue(t, val, null);
+                            }
+                            catch (Exception ex)
+                            {
+                                try
+                                {
+                                    string s = ex.Message + sval;
+                                    switch (prop.PropertyType.Name)
+                                    {
+                                        case "String":
+                                            prop.SetValue(t, sval, null);
+                                            break;
+                                        case "DateTime":
+                                            prop.SetValue(t, sval.toDateTime(), null);
+                                            break;
+                                        case "Int64":
+                                            prop.SetValue(t, sval.ToInt32(), null);
+                                            break;
+                                        case "Int32":
+                                            prop.SetValue(t, sval.ToInt32(), null);
+                                            break;
+                                        case "Decimal":
+                                            prop.SetValue(t, sval.ToDecimal(), null);
+                                            break;
+                                        case "Boolean":
+                                            prop.SetValue(t, sval.ToBool(), null);
+                                            break;
+                                        case "Nullable`1":
+                                            if (prop.PropertyType.FullName.Contains("System.Int32"))
+                                            {
+                                                if (sval != string.Empty)
+                                                {
+                                                    prop.SetValue(t, sval.ToInt32(), null);
+                                                }
+                                            }
+                                            else if (prop.PropertyType.FullName.Contains("System.Boolean"))
+                                            {
+                                                if (sval != string.Empty)
+                                                {
+                                                    prop.SetValue(t, sval.ToBool(), null);
+                                                }
+                                            }
+                                            else if (prop.PropertyType.FullName.Contains("System.DateTime"))
+                                            {
+                                                if (sval != string.Empty)
+                                                {
+                                                    prop.SetValue(t, sval.toDateTime(), null);
+                                                }
+                                            }
+                                            else if (prop.PropertyType.FullName.Contains("System.Decimal"))
+                                            {
+                                                if (sval != string.Empty)
+                                                {
+                                                    prop.SetValue(t, sval.ToDecimal(), null);
+                                                }
+                                            }
+                                            break;
+                                        default:
+                                            prop.SetValue(t, null, null);
+                                            break;
+                                    }
+                                }
+                                catch (Exception) { continue; }
+                                continue;
+                            }
+
+                        }
+                    }
+                    res.Add(t);
+                }
+                return res;
+            }
+            catch (Exception ex)
+            {
+                string s = ex.Message + sval;
+                throw;
+            }
+
+        }
+        private static T ToSingle<T>(SqlDataReader dataReader) where T : new()
+        {
+            T t = new T();
+            while (dataReader.Read())
+            {
+                for (int inc = 0; inc < dataReader.FieldCount; inc++)
+                {
+                    Type type = t.GetType();
+                    PropertyInfo prop = type.GetProperty(dataReader.GetName(inc));
+                    var val = dataReader.GetValue(inc);
+                    if (val != DBNull.Value)
+                    {
+                        prop.SetValue(t, val, null);
+                    }
+                }
+
+            }
+            return t;
+
+        }
         public static string GetDate(DateTime dateTime)
         {
             try
@@ -2086,31 +2269,6 @@ namespace AshproORM
                 throw ex;
             }
         }
-        public static DataTable GetDataTableWithIdParameter_SP(string sStoredProceedure, string Value, string Connection)
-        {
-            System.Threading.Thread.CurrentThread.CurrentCulture = System.Threading.Thread.CurrentThread.CurrentUICulture = new System.Globalization.CultureInfo("en");
-            try
-            {
-                DataTable dt = new DataTable();
-                using (SqlConnection con = new SqlConnection(Connection))
-                {
-                    using (SqlCommand cmd = new SqlCommand(sStoredProceedure, con))
-                    {
-                        cmd.CommandType = CommandType.StoredProcedure;
-                        cmd.Parameters.AddWithValue("@Id", Value);
-                        using (SqlDataAdapter da = new SqlDataAdapter(cmd))
-                        {
-                            da.Fill(dt);
-                        }
-                    }
-                }
-                return dt;
-            }
-            catch (Exception ex)
-            {
-                throw ex;
-            }
-        }
         public static DataTable GetDataTableWithIdParameter_SP(string sStoredProceedure, object entity, string Connection)
         {
             System.Threading.Thread.CurrentThread.CurrentCulture = System.Threading.Thread.CurrentThread.CurrentUICulture = new System.Globalization.CultureInfo("en");
@@ -2146,131 +2304,193 @@ namespace AshproORM
                 throw ex;
             }
         }
-        public static List<T> GetList_SP<T>(string sStoredProceedure, string Connection)
+        public static List<T> GetList_SP<T>(string sStoredProceedure, string Connection) where T: new()
         {
+            SqlDataReader reader = null;
             try
             {
-                List<T> dsList = new List<T>();
-                DataTable dt = new DataTable();
-                dt = GetDataTable_SP(sStoredProceedure, Connection);
-                dsList = ConvertDataTable<T>(dt);
-                return dsList;
-            }
-            catch (Exception ex)
-            {
-                throw ex;
-            }
-        }
-        public static List<T> GetList_SP<T>(string sStoredProceedure, string Value, string Connection)
-        {
-            try
-            {
-                List<T> dsList = new List<T>();
-                DataTable dt = new DataTable();
-                dt = GetDataTableWithIdParameter_SP(sStoredProceedure, Value, Connection);
-                dsList = ConvertDataTable<T>(dt);
-                return dsList;
-            }
-            catch (Exception ex)
-            {
-                throw ex;
-            }
-        }
-        public static List<T> GetList_SP<T>(string sStoredProceedure, object entity, string Connection)
-        {
-            try
-            {
-                List<T> dsList = new List<T>();
-                DataTable dt = new DataTable();
-                dt = GetDataTableWithIdParameter_SP(sStoredProceedure, entity, Connection);
-                dsList = ConvertDataTable<T>(dt);
-                return dsList;
-            }
-            catch (Exception ex)
-            {
-                throw ex;
-            }
-        }
-        public static T GetObject_SP<T>(string sStoredProceedure, string Value, string Connection)
-        {
-            try
-            {
-                Type temp = typeof(T);
-                T obj = Activator.CreateInstance<T>();
-                DataTable dt = new DataTable();
-                dt = GetDataTableWithIdParameter_SP(sStoredProceedure, Value, Connection);
-                if (dt.Rows.Count > 0)
+                using (SqlConnection conn = new SqlConnection(Connection))
                 {
-                    obj = GetItem<T>(dt.Rows[0]);
+                    using (SqlCommand cmd = new SqlCommand(sStoredProceedure, conn))
+                    {
+                        cmd.CommandType = CommandType.StoredProcedure;
+                        conn.Open();
+                        reader = cmd.ExecuteReader();
+                        List<T> list = ToList<T>(reader);
+                        reader.Close();
+                        reader.Dispose();
+                        return list;
+                    }
                 }
-                return obj;
             }
             catch (Exception ex)
             {
                 throw ex;
             }
         }
-        public static T GetObjectWithparameter_SP<T>(string sStoredProceedure, object entity, string Connection)
+        public static List<T> GetList_SP<T>(string sStoredProceedure, object entity, string Connection) where T : new()
+        {
+            SqlDataReader reader = null;
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(Connection))
+                {
+                    using (SqlCommand cmd = new SqlCommand(sStoredProceedure, conn))
+                    {
+                        cmd.CommandType = CommandType.StoredProcedure;
+                        if (entity != null)
+                        {
+                            foreach (var item in entity.GetType().GetProperties())
+                            {
+                                if (item.GetValue(entity, null) != null)
+                                {
+                                    cmd.Parameters.AddWithValue(item.Name, item.GetValue(entity, null).ToString());
+                                }
+                            }
+                        }
+                        conn.Open();
+                        reader = cmd.ExecuteReader();
+                        List<T> list = ToList<T>(reader);
+                        reader.Close();
+                        reader.Dispose();
+                        return list;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+        }
+        public static T GetObject_SP<T>(string sStoredProceedure, string Value, string Connection) where T : new()
+        {
+            SqlDataReader reader = null;
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(Connection))
+                {
+                    using (SqlCommand cmd = new SqlCommand(sStoredProceedure, conn))
+                    {
+                        cmd.CommandType = CommandType.StoredProcedure;
+                        cmd.Parameters.AddWithValue("@Id", Value);
+                        conn.Open();
+                        reader = cmd.ExecuteReader();
+                        T list = ToSingle<T>(reader);
+                        reader.Close();
+                        reader.Dispose();
+                        return list;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+        }
+        public static T GetObjectWithparameter_SP<T>(string sStoredProceedure, object entity, string Connection) where T:new()
+        {
+            SqlDataReader reader = null;
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(Connection))
+                {
+                    using (SqlCommand cmd = new SqlCommand(sStoredProceedure, conn))
+                    {
+                        cmd.CommandType = CommandType.StoredProcedure;
+                        if (entity != null)
+                        {
+                            foreach (var item in entity.GetType().GetProperties())
+                            {
+                                if (item.GetValue(entity, null) != null)
+                                {
+                                    cmd.Parameters.AddWithValue(item.Name, item.GetValue(entity, null).ToString());
+                                }
+                            }
+                        }
+                        conn.Open();
+                        reader = cmd.ExecuteReader();
+                        T list = ToSingle<T>(reader);
+                        reader.Close();
+                        reader.Dispose();
+                        return list;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+        }
+        public static T GetObject_SP<T>(string sStoredProceedure, string Connection) where T :new()
+        {
+            SqlDataReader reader = null;
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(Connection))
+                {
+                    using (SqlCommand cmd = new SqlCommand(sStoredProceedure, conn))
+                    {
+                        cmd.CommandType = CommandType.StoredProcedure;
+                        conn.Open();
+                        reader = cmd.ExecuteReader();
+                        T list = ToSingle<T>(reader);
+                        reader.Close();
+                        reader.Dispose();
+                        return list;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+        }
+        public static dynamic GetValue_SP(string sStoredProceedure, string Connection)
         {
             try
             {
-                Type temp = typeof(T);
-                T obj = Activator.CreateInstance<T>();
-                DataTable dt = new DataTable();
-                dt = GetDataTableWithIdParameter_SP(sStoredProceedure, entity, Connection);
-                if (dt.Rows.Count > 0)
+                using (SqlConnection con = new SqlConnection(Connection))
                 {
-                    obj = GetItem<T>(dt.Rows[0]);
+                    using (SqlCommand cmd = new SqlCommand(sStoredProceedure, con))
+                    {
+                        cmd.CommandType = CommandType.StoredProcedure;
+                        con.Open();
+                        return cmd.ExecuteScalar();
+                    }
                 }
-                return obj;
             }
             catch (Exception ex)
             {
                 throw ex;
             }
         }
-        public static T GetObject_SP<T>(string sStoredProceedure, string Connection)
+        public static dynamic GetValue_SP(string sStoredProceedure, object entity, string Connection)
         {
             try
             {
-                T obj = Activator.CreateInstance<T>();
-                DataTable dt = new DataTable();
-                dt = GetDataTable_SP(sStoredProceedure, Connection);
-                if (dt.Rows.Count > 0)
+                using (SqlConnection con = new SqlConnection(Connection))
                 {
-                    obj = GetItem<T>(dt.Rows[0]);
+                    using (SqlCommand cmd = new SqlCommand(sStoredProceedure, con))
+                    {
+                        cmd.CommandType = CommandType.StoredProcedure;
+                        if (entity != null)
+                        {
+                            foreach (var item in entity.GetType().GetProperties())
+                            {
+                                if (item.GetValue(entity, null) != null)
+                                {
+                                    cmd.Parameters.AddWithValue(item.Name, item.GetValue(entity, null).ToString());
+                                }
+                            }
+                        }
+                        con.Open();
+                        return cmd.ExecuteScalar();
+                    }
                 }
-                return obj;
             }
             catch (Exception ex)
             {
                 throw ex;
-            }
-        }
-        public static string GetData_SP(string sStoredProceedure, string Connection)
-        {
-            DataTable dt = new DataTable();
-            dt = GetDataTable_SP(sStoredProceedure, Connection);
-            if (dt.Rows.Count > 0)
-            {
-                return dt.Rows[0][0].ToString();
-            }
-            else
-            {
-                return null;
-            }
-        }
-        public static string GetDataWithParameter_SP(string sStoredProceedure, object entity, string Connection)
-        {
-            DataTable dt = new DataTable();
-            dt = GetDataTableWithIdParameter_SP(sStoredProceedure, entity, Connection);
-            if (dt.Rows.Count > 0)
-            {
-                return dt.Rows[0][0].ToString();
-            }
-            else
-            {
-                return null;
             }
         }
         public static bool DatabaseExecution_SP(string sStoredProceedure, string Connection, Object entity = null)
@@ -2807,121 +3027,23 @@ namespace AshproORM
             });
             return value;
         }
-        public static async Task<List<T>> GetListAsync_SP<T>(string sStoredProceedure, string Connection)
+        public static async Task<List<T>> GetListAsync_SP<T>(string sStoredProceedure, string Connection) where T:new()
         {
+            SqlDataReader reader = null;
             try
             {
-                List<T> dsList = new List<T>();
-                DataTable dt = new DataTable();
-                dt = await GetDataTableAsync_SP(sStoredProceedure, Connection);
-                dsList = ConvertDataTable<T>(dt);
-                return dsList;
-            }
-            catch (Exception ex)
-            {
-                throw ex;
-            }
-        }
-        public static async Task<List<T>> GetListAsync_SP<T>(string sStoredProceedure, string Value, string Connection)
-        {
-            try
-            {
-                List<T> dsList = new List<T>();
-                DataTable dt = new DataTable();
-                dt = await GetDataTableWithIdParameterAsync_SP(sStoredProceedure, Value, Connection);
-                dsList = await ConvertDataTableAsync<T>(dt);
-                return dsList;
-            }
-            catch (Exception ex)
-            {
-                throw ex;
-            }
-        }
-        public static async Task<List<T>> GetListAsync_SP<T>(string sStoredProceedure, object entity, string Connection)
-        {
-            try
-            {
-                List<T> dsList = new List<T>();
-                DataTable dt = new DataTable();
-                dt = await GetDataTableWithIdParameterAsync_SP(sStoredProceedure, entity, Connection);
-                dsList = await ConvertDataTableAsync<T>(dt);
-                return dsList;
-            }
-            catch (Exception ex)
-            {
-                throw ex;
-            }
-        }
-        public static async Task<T> GetAsync_SP<T>(string sStoredProceedure, string Value, string Connection)
-        {
-            try
-            {
-                Type temp = typeof(T);
-                T obj = Activator.CreateInstance<T>();
-                DataTable dt = new DataTable();
-                dt = await GetDataTableWithIdParameterAsync_SP(sStoredProceedure, Value, Connection);
-                if (dt.Rows.Count > 0)
+                using (SqlConnection conn = new SqlConnection(Connection))
                 {
-                    obj = await GetItemAsync<T>(dt.Rows[0]);
-                }
-                return obj;
-            }
-            catch (Exception ex)
-            {
-                throw ex;
-            }
-        }
-        public static async Task<T> GetAsyncWithparameter_SP<T>(string sStoredProceedure, object entity, string Connection)
-        {
-            try
-            {
-                Type temp = typeof(T);
-                T obj = Activator.CreateInstance<T>();
-                DataTable dt = new DataTable();
-                dt = await GetDataTableWithIdParameterAsync_SP(sStoredProceedure, entity, Connection);
-                if (dt.Rows.Count > 0)
-                {
-                    obj = await GetItemAsync<T>(dt.Rows[0]);
-                }
-                return obj;
-            }
-            catch (Exception ex)
-            {
-                throw ex;
-            }
-        }
-        public static async Task<T> GetAsync_SP<T>(string sStoredProceedure, string Connection)
-        {
-            try
-            {
-                T obj = Activator.CreateInstance<T>();
-                DataTable dt = new DataTable();
-                dt = await GetDataTableAsync_SP(sStoredProceedure, Connection);
-                if (dt.Rows.Count > 0)
-                {
-                    obj = await GetItemAsync<T>(dt.Rows[0]);
-                }
-                return obj;
-            }
-            catch (Exception ex)
-            {
-                throw ex;
-            }
-        }
-        public static async Task<string> GetDataAsync_SP(string sStoredProceedure, string Connection)
-        {
-            try
-            {
-                System.Threading.Thread.CurrentThread.CurrentCulture = System.Threading.Thread.CurrentThread.CurrentUICulture = new System.Globalization.CultureInfo("en");
-                using (SqlConnection con = new SqlConnection(Connection))
-                {
-                    using (SqlCommand cmd = new SqlCommand())
+                    using (SqlCommand cmd = new SqlCommand(sStoredProceedure, conn))
                     {
-                        cmd.Connection = con;
                         cmd.CommandType = CommandType.StoredProcedure;
-                        cmd.CommandText = sStoredProceedure;
-                        con.Open();
-                        return (await cmd.ExecuteScalarAsync()).ToString();
+
+                        await conn.OpenAsync();
+                        reader = await cmd.ExecuteReaderAsync();
+                        List<T> list = ToList<T>(reader);
+                        reader.Close();
+                        reader.Dispose();
+                        return list;
                     }
                 }
             }
@@ -2930,7 +3052,170 @@ namespace AshproORM
                 throw ex;
             }
         }
-        public static async Task<object> GetDataWithParameterAsync_SP(string sStoredProceedure, object entity, string Connection)
+        public static async Task<List<T>> GetListAsync_SP<T>(string sStoredProceedure, string Value, string Connection)where T:new()
+        {
+            SqlDataReader reader = null;
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(Connection))
+                {
+                    using (SqlCommand cmd = new SqlCommand(sStoredProceedure, conn))
+                    {
+                        cmd.CommandType = CommandType.StoredProcedure;
+                        cmd.Parameters.AddWithValue("@Id", Value);
+                        await conn.OpenAsync();
+                        reader = await cmd.ExecuteReaderAsync();
+                        List<T> list = ToList<T>(reader);
+                        reader.Close();
+                        reader.Dispose();
+                        return list;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+        }
+        public static async Task<List<T>> GetListAsync_SP<T>(string sStoredProceedure, object entity, string Connection) where T:new()
+        {
+            SqlDataReader reader = null;
+            try
+            {
+                System.Threading.Thread.CurrentThread.CurrentCulture = System.Threading.Thread.CurrentThread.CurrentUICulture = new System.Globalization.CultureInfo("en");
+                using (SqlConnection conn = new SqlConnection(Connection))
+                {
+                    using (SqlCommand cmd = new SqlCommand(sStoredProceedure, conn))
+                    {
+                        cmd.CommandType = CommandType.StoredProcedure;
+                        if (entity != null)
+                        {
+                            foreach (var item in entity.GetType().GetProperties())
+                            {
+                                if (item.GetValue(entity, null) != null)
+                                {
+                                    cmd.Parameters.AddWithValue(item.Name, item.GetValue(entity, null).ToString());
+                                }
+                            }
+                        }
+                        await conn.OpenAsync();
+                        reader = await cmd.ExecuteReaderAsync();
+                        List<T> list = ToList<T>(reader);
+                        reader.Close();
+                        reader.Dispose();
+                        return list;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+        }
+        public static async Task<T> GetAsync_SP<T>(string sStoredProceedure, string Value, string Connection) where T : new()
+        {
+            SqlDataReader reader = null;
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(Connection))
+                {
+                    using (SqlCommand cmd = new SqlCommand(sStoredProceedure, conn))
+                    {
+                        cmd.CommandType = CommandType.StoredProcedure;
+                        cmd.Parameters.AddWithValue("@Id", Value);
+                        await conn.OpenAsync();
+                        reader = await cmd.ExecuteReaderAsync();
+                        T list = ToSingle<T>(reader);
+                        reader.Close();
+                        reader.Dispose();
+                        return list;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+        }
+        public static async Task<T> GetAsync_SP<T>(string sStoredProceedure, object entity, string Connection) where T : new()
+        {
+            SqlDataReader reader = null;
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(Connection))
+                {
+                    using (SqlCommand cmd = new SqlCommand(sStoredProceedure, conn))
+                    {
+                        cmd.CommandType = CommandType.StoredProcedure;
+                        if (entity != null)
+                        {
+                            foreach (var item in entity.GetType().GetProperties())
+                            {
+                                if (item.GetValue(entity, null) != null)
+                                {
+                                    cmd.Parameters.AddWithValue(item.Name, item.GetValue(entity, null).ToString());
+                                }
+                            }
+                        }
+                        await conn.OpenAsync();
+                        reader = await cmd.ExecuteReaderAsync();
+                        T list = ToSingle<T>(reader);
+                        reader.Close();
+                        reader.Dispose();
+                        return list;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+        }
+        public static async Task<T> GetAsync_SP<T>(string sStoredProceedure, string Connection) where T:new()
+        {
+            SqlDataReader reader = null;
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(Connection))
+                {
+                    using (SqlCommand cmd = new SqlCommand(sStoredProceedure, conn))
+                    {
+                        cmd.CommandType = CommandType.StoredProcedure;
+                        await conn.OpenAsync();
+                        reader = await cmd.ExecuteReaderAsync();
+                        T list = ToSingle<T>(reader);
+                        reader.Close();
+                        reader.Dispose();
+                        return list;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+        }
+        public static async Task<dynamic> GetValueAsync_SP(string sStoredProceedure, string Connection)
+        {
+            try
+            {
+                System.Threading.Thread.CurrentThread.CurrentCulture = System.Threading.Thread.CurrentThread.CurrentUICulture = new System.Globalization.CultureInfo("en");
+                using (SqlConnection con = new SqlConnection(Connection))
+                {
+                    using (SqlCommand cmd = new SqlCommand(sStoredProceedure, con))
+                    {
+                        cmd.CommandType = CommandType.StoredProcedure;
+                        await con.OpenAsync();
+                        return (await cmd.ExecuteScalarAsync());
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+        }
+        public static async Task<dynamic> GetvalueAsync_SP(string sStoredProceedure, object entity, string Connection)
         {
             try
             {
