@@ -13,7 +13,8 @@
     <RepositoryType>Dotnet Library</RepositoryType>
     <NeutralLanguage>en</NeutralLanguage>
     <PackageReleaseNotes>This is a light weight ORM library</PackageReleaseNotes>
-    <Version>6.0.0</Version>
+    <Version>6.1.0</Version>
+    <Company>Ashpro</Company>
   </PropertyGroup>
 
   <ItemGroup>

@@ -204,7 +204,7 @@ namespace AshproORM
             try
             {
                 sCon = sCon ?? DBConnection.Connection;
-                List<KeyValuePair<string, string>> values = new List<KeyValuePair<string, string>>();
+                var values = new List<string>();
                 using (SqlConnection con = new SqlConnection(sCon))
                 {
                     foreach (var item in data.GetType().GetProperties())
@@ -215,7 +215,7 @@ namespace AshproORM
                             {
                                 continue;
                             }
-                            values.Add(new KeyValuePair<string, string>(item.Name, "@" + item.Name));
+                            values.Add(item.Name);
                         }
                     }
                     string Query = await getInsertCommandAsync(table, values);
@@ -240,7 +240,7 @@ namespace AshproORM
             try
             {
                 sCon = sCon ?? DBConnection.Connection;
-                List<KeyValuePair<string, string>> values = new List<KeyValuePair<string, string>>();
+                var values = new List<string>();
                 using (SqlConnection con = new SqlConnection(sCon))
                 {
                     foreach (var item in data.GetType().GetProperties())
@@ -251,10 +251,10 @@ namespace AshproORM
                             {
                                 continue;
                             }
-                            values.Add(new KeyValuePair<string, string>(item.Name, "@" + item.Name));
+                            values.Add(item.Name);
                         }
                     }
-                    string Query = await getUpdateCommandAsync(table, values, column, "@" + column);
+                    string Query = await getUpdateCommandAsync(table, values, column, iValue);
                     using (SqlCommand cmd = new SqlCommand(Query, con))
                     {
                         cmd.Parameters.Clear();
@@ -328,7 +328,7 @@ namespace AshproORM
                 sCon = sCon ?? DBConnection.Connection;
                 await DeleteOldAsync(datas, oldDatas, table, sCon);
                 bool result = false;
-                string sValue = string.Empty;
+                int sValue = 0;
                 List<KeyValuePair<dynamic, dynamic>> values = new List<KeyValuePair<dynamic, dynamic>>();
                 SqlConnection con = new SqlConnection(sCon);
                 await con.OpenAsync();
@@ -339,14 +339,14 @@ namespace AshproORM
                         bool iIncluded = false;
                         string sColumn = string.Empty;
                         string Query = string.Empty;
-                        List<Common> iCommon = new List<Common>();
+                        List<int> iCommon = new List<int>();
                         values.Clear();
                         foreach (DataColumn item in data.Table.Columns)
                         {
                             if (item.ColumnName == data.Table.Columns[0].ColumnName)
                             {
                                 sColumn = item.ColumnName;
-                                sValue = data[item.ColumnName].ToString();
+                                sValue = data[item.ColumnName].ToInt32();
                             }
                             else
                             {
@@ -354,12 +354,11 @@ namespace AshproORM
                             }
                             iCommon = await GetCommonAsync(table, sColumn, sCon);
                         }
-                        if (sValue != null && sValue != string.Empty)
+                        if (sValue > 0)
                         {
-                            iIncluded = iCommon.Any(x => x.id == Convert.ToInt32(sValue));
-                            if (iIncluded)
+                            if (iCommon.Any(x => x == sValue))
                             {
-                                Query = await getUpdateCommandAsync(table, values, sColumn, sValue);
+                                Query = await getUpdateCommandAsyncTwo(table, values, sColumn, sValue);
                             }
                             else
                             {
@@ -392,18 +391,17 @@ namespace AshproORM
         public static async Task<bool> UpdateAsync(List<object> newDatas, List<object> oldDatas, string sTable, string sColumn, string sCon = null)
         {
             sCon = sCon ?? DBConnection.Connection;
-            var newList = new List<Common>();
-            var oldList = new List<Common>();
+            var newList = new List<int>();
+            var oldList = new List<int>();
             newList = await GetIdListAsync(newDatas, sColumn);
             oldList = await GetIdListAsync(oldDatas, sColumn);
             try
             {
-                foreach (Common item in oldList)
+                foreach (int item in oldList)
                 {
-                    bool included = newList.Any(x => x.id == item.id);
-                    if (!included)
+                    if (!newList.Any(x => x == item))
                     {
-                        await DeleteAsync(sTable, sColumn, item.id, sCon);
+                        await DeleteAsync(sTable, sColumn, item, sCon);
                     }
                 }
             }
@@ -411,12 +409,10 @@ namespace AshproORM
             {
                 throw ex;
             }
-            foreach (Common item in newList)
+            foreach (int item in newList)
             {
-                bool included = oldList.Any(x => x.id == item.id);
-                if (!included)
+                if (!oldList.Any(x => x == item))
                 {
-                    int? sVal = item.id;
                     try
                     {
                         foreach (var obj in newDatas)
@@ -426,7 +422,7 @@ namespace AshproORM
                                 if (x.Name == sColumn)
                                 {
                                     int? iVal = x.GetValue(obj, null).ToInt32();
-                                    if (iVal == sVal)
+                                    if (iVal == item)
                                     {
                                         await InsertAsync(obj, sTable, sCon);
                                         break;
@@ -443,7 +439,6 @@ namespace AshproORM
                 }
                 else
                 {
-                    int? sVal = item.id;
                     try
                     {
                         foreach (var obj in newDatas)
@@ -453,9 +448,9 @@ namespace AshproORM
                                 if (x.Name == sColumn)
                                 {
                                     int? iVal = x.GetValue(obj, null).ToInt32();
-                                    if (iVal == sVal)
+                                    if (iVal == item)
                                     {
-                                        await UpdateAsync(obj, sTable, sColumn, sVal.ToInt32(), sCon);
+                                        await UpdateAsync(obj, sTable, sColumn, item, sCon);
                                         break;
                                     }
                                 }
@@ -786,7 +781,7 @@ namespace AshproORM
                 sCon = sCon ?? DBConnection.Connection;
                 DeleteOldItem(datas, oldDatas, table, sCon);
                 bool result = false;
-                string sValue = string.Empty;
+                int sValue = 0;
                 List<KeyValuePair<dynamic, dynamic>> values = new List<KeyValuePair<dynamic, dynamic>>();
                 SqlConnection con = new SqlConnection(sCon);
                 con.Open();
@@ -797,14 +792,14 @@ namespace AshproORM
                         bool iIncluded = false;
                         string sColumn = string.Empty;
                         string Query = string.Empty;
-                        List<Common> iCommon = new List<Common>();
+                        List<int> iCommon = new List<int>();
                         values.Clear();
                         foreach (DataColumn item in data.Table.Columns)
                         {
                             if (item.ColumnName == data.Table.Columns[0].ColumnName)
                             {
                                 sColumn = item.ColumnName;
-                                sValue = data[item.ColumnName].ToString();
+                                sValue = data[item.ColumnName].ToInt32();
                             }
                             else
                             {
@@ -812,10 +807,9 @@ namespace AshproORM
                             }
                             iCommon = GetCommon(table, sColumn, sCon);
                         }
-                        if (sValue != null && sValue != string.Empty)
+                        if (sValue > 0)
                         {
-                            iIncluded = iCommon.Any(x => x.id == Convert.ToInt32(sValue));
-                            if (iIncluded)
+                            if (iCommon.Any(x => x == sValue))
                             {
                                 Query = getUpdateCommand(table, values, sColumn, sValue);
                             }
@@ -848,18 +842,17 @@ namespace AshproORM
         }
         public static bool UpdateDatabase(List<object> newDatas, List<object> oldDatas, string sTable, string sColumn, string sCon = null)
         {
-            List<Common> newList = new List<Common>();
-            List<Common> oldList = new List<Common>();
+            List<int> newList = new List<int>();
+            List<int> oldList = new List<int>();
             newList = GetIdList(newDatas, sColumn);
             oldList = GetIdList(oldDatas, sColumn);
             try
             {
-                foreach (Common item in oldList)
+                foreach (int item in oldList)
                 {
-                    bool included = newList.Any(x => x.id == item.id);
-                    if (!included)
+                    if (!newList.Any(x => x == item))
                     {
-                        DeleteFromDatabase(sTable, sColumn, item.id, sCon);
+                        DeleteFromDatabase(sTable, sColumn, item, sCon);
                     }
                 }
             }
@@ -867,12 +860,10 @@ namespace AshproORM
             {
                 throw ex;
             }
-            foreach (Common item in newList)
+            foreach (int item in newList)
             {
-                bool included = oldList.Any(x => x.id == item.id);
-                if (!included)
+                if (!oldList.Any(x => x == item))
                 {
-                    int? sVal = item.id;
                     try
                     {
                         foreach (var obj in newDatas)
@@ -882,7 +873,7 @@ namespace AshproORM
                                 if (x.Name == sColumn)
                                 {
                                     int? iVal = x.GetValue(obj, null).ToInt32();
-                                    if (iVal == sVal)
+                                    if (iVal == item)
                                     {
                                         InsertToDatabaseObj(obj, sTable, sCon);
                                         break;
@@ -899,7 +890,6 @@ namespace AshproORM
                 }
                 else
                 {
-                    int? sVal = item.id;
                     try
                     {
                         foreach (var obj in newDatas)
@@ -909,9 +899,9 @@ namespace AshproORM
                                 if (x.Name == sColumn)
                                 {
                                     int? iVal = x.GetValue(obj, null).ToInt32();
-                                    if (iVal == sVal)
+                                    if (iVal == item)
                                     {
-                                        UpdateToDatabaseObj(obj, sTable, sColumn, sVal.ToInt32(), sCon);
+                                        UpdateToDatabaseObj(obj, sTable, sColumn, item, sCon);
                                         break;
                                     }
                                 }
@@ -938,20 +928,16 @@ namespace AshproORM
             try
             {
                 string sColumn = string.Empty;
-                foreach (DataRow item in newDt.Rows)
-                {
-                    sColumn = item.Table.Columns[0].ColumnName;
-                }
-                List<Common> newList = new List<Common>();
-                List<Common> oldList = new List<Common>();
+                sColumn = newDt.Rows[0].Table.Columns[0].ColumnName;
+                List<int> newList = new List<int>();
+                List<int> oldList = new List<int>();
                 newList = await GetIdListAsync(newDt);
                 oldList = await GetIdListAsync(oldDt);
-                foreach (Common item in oldList)
+                foreach (int item in oldList)
                 {
-                    bool included = newList.Any(x => x.id == item.id);
-                    if (!included)
+                    if (!newList.Any(x => x == item))
                     {
-                        await DeleteAsync(sTable, sColumn, item.id, sCon);
+                        await DeleteAsync(sTable, sColumn, item, sCon);
                     }
                 }
             }
@@ -960,17 +946,15 @@ namespace AshproORM
                 throw;
             }
         }
-        private static async Task<List<Common>> GetCommonAsync(string sTable, string sColumn, string sCon = null)
+        private static async Task<List<int>> GetCommonAsync(string sTable, string sColumn, string sCon = null)
         {
             try
             {
-                List<Common> iCommon = new List<Common>();
+                List<int> iCommon = new List<int>();
                 var dt = await GetDataTableAsync("Select " + sColumn + " From " + sTable, sCon);
                 foreach (DataRow drw in dt.Rows)
                 {
-                    Common cmn = new Common();
-                    cmn.id = Convert.ToInt32(drw[0].ToString());
-                    iCommon.Add(cmn);
+                    iCommon.Add(drw[0].ToInt32());
                 }
                 return iCommon;
             }
@@ -979,22 +963,20 @@ namespace AshproORM
                 throw;
             }
         }
-        private static async Task<List<Common>> GetIdListAsync(List<object> data, string sColumn)
+        private static async Task<List<int>> GetIdListAsync(List<object> data, string sColumn)
         {
-            var value = await Task.Run<List<Common>>(() =>
+            var value = await Task.Run<List<int>>(() =>
             {
                 try
                 {
-                    List<Common> iCommon = new List<Common>();
+                    List<int> iCommon = new List<int>();
                     foreach (var obj in data)
                     {
                         foreach (var item in obj.GetType().GetProperties())
                         {
-                            Common cmn = new Common();
                             if (item.Name == sColumn)
                             {
-                                cmn.id = item.GetValue(obj, null).ToInt32();
-                                iCommon.Add(cmn);
+                                iCommon.Add(item.GetValue(obj, null).ToInt32());
                                 break;
                             }
                         }
@@ -1008,18 +990,16 @@ namespace AshproORM
             });
             return value;
         }
-        private static async Task<List<Common>> GetIdListAsync(DataTable sTable)
+        private static async Task<List<int>> GetIdListAsync(DataTable sTable)
         {
-            var value = await Task.Run<List<Common>>(() =>
+            var value = await Task.Run<List<int>>(() =>
             {
                 try
                 {
-                    List<Common> iCommon = new List<Common>();
+                    var iCommon = new List<int>();
                     foreach (DataRow drw in sTable.Rows)
                     {
-                        Common cmn = new Common();
-                        cmn.id = Convert.ToInt32(drw[0].ToString());
-                        iCommon.Add(cmn);
+                        iCommon.Add(drw[0].ToInt32());
                         continue;
                     }
                     return iCommon;
@@ -1079,32 +1059,15 @@ namespace AshproORM
             });
             return value;
         }
-        private static async Task<string> getUpdateCommandAsync(string table, List<KeyValuePair<dynamic, dynamic>> values, string column, string sValue)
+        private static async Task<string> getUpdateCommandAsync(string table, List<string> values, string column, int sValue)
         {
             var value = await Task.Run<string>(() =>
             {
                 try
                 {
                     string query = null;
-                    query += "Update  " + table + " Set ";
-                    foreach (var item in values)
-                    {
-                        query += item.Key;
-                        query += "=";
-                        if (item.Key.GetType().Name == "System.Int") // or any other numerics
-                        {
-                            query += item.Value;
-                        }
-                        else
-                        {
-                            query += "'";
-                            query += item.Value;
-                            query += "'";
-                        }
-                        query += ", ";
-                    }
-                    query = query.Remove(query.Length - 2, 2);
-                    query += " Where " + column + " = '" + sValue + "'";
+                    var sList = values.Aggregate((s, v) => (s + "=@" + s) + "," + (v + "=@" + v));
+                    query = $"Update {table} Set {sList} Where {column} = '{sValue}'";
                     return query;
                 }
                 catch (Exception ex)
@@ -1114,7 +1077,7 @@ namespace AshproORM
             });
             return value;
         }
-        private static async Task<string> getUpdateCommandAsync(string table, List<KeyValuePair<string, string>> values, string column, dynamic sValue)
+        private static async Task<string> getUpdateCommandAsyncTwo(string table, List<KeyValuePair<dynamic, dynamic>> values, string column, dynamic sValue)
         {
             var value = await Task.Run<string>(() =>
             {
@@ -1140,29 +1103,16 @@ namespace AshproORM
             });
             return value;
         }
-        private static async Task<string> getInsertCommandAsync(string table, List<KeyValuePair<string, string>> values)
+        private static async Task<string> getInsertCommandAsync(string table, List<string> values)
         {
             var value = await Task.Run<string>(() =>
             {
                 try
                 {
+                    string keystring = values.Aggregate((a, b) => a + ", " + b);
+                    string valuestring = values.Aggregate((a, b) => a + ", " + "@" + b);
                     string query = null;
-                    query += "INSERT INTO " + table + " ( ";
-                    foreach (var item in values)
-                    {
-                        query += item.Key;
-                        query += ", ";
-                    }
-                    query = query.Remove(query.Length - 2, 2);
-                    query += ") VALUES ( ";
-                    foreach (var item in values)
-                    {
-
-                        query += item.Value;
-                        query += ", ";
-                    }
-                    query = query.Remove(query.Length - 2, 2);
-                    query += ")";
+                    query = $"INSERT INTO {table} ({keystring}) VALUES (@{valuestring})";
                     return query;
                 }
                 catch (Exception ex)
@@ -1339,16 +1289,15 @@ namespace AshproORM
                 {
                     sColumn = item.Table.Columns[0].ColumnName;
                 }
-                List<Common> newList = new List<Common>();
-                List<Common> oldList = new List<Common>();
+                List<int> newList = new List<int>();
+                List<int> oldList = new List<int>();
                 newList = GetIdList(newDt);
                 oldList = GetIdList(oldDt);
-                foreach (Common item in oldList)
+                foreach (int item in oldList)
                 {
-                    bool included = newList.Any(x => x.id == item.id);
-                    if (!included)
+                    if (!newList.Any(x => x == item))
                     {
-                        DeleteFromDatabase(sTable, sColumn, item.id, sCon);
+                        DeleteFromDatabase(sTable, sColumn, item, sCon);
                     }
                 }
             }
@@ -1357,17 +1306,15 @@ namespace AshproORM
                 throw;
             }
         }
-        private static List<Common> GetCommon(string sTable, string sColumn, string sCon = null)
+        private static List<int> GetCommon(string sTable, string sColumn, string sCon = null)
         {
             try
             {
-                List<Common> iCommon = new List<Common>();
+                List<int> iCommon = new List<int>();
                 var dt = GetDataTable("Select " + sColumn + " From " + sTable, sCon);
                 foreach (DataRow drw in dt.Rows)
                 {
-                    Common cmn = new Common();
-                    cmn.id = Convert.ToInt32(drw[0].ToString());
-                    iCommon.Add(cmn);
+                    iCommon.Add(drw[0].ToInt32());
                 }
                 return iCommon;
             }
@@ -1376,20 +1323,18 @@ namespace AshproORM
                 throw;
             }
         }
-        private static List<Common> GetIdList(List<object> data, string sColumn)
+        private static List<int> GetIdList(List<object> data, string sColumn)
         {
             try
             {
-                List<Common> iCommon = new List<Common>();
+                List<int> iCommon = new List<int>();
                 foreach (var obj in data)
                 {
                     foreach (var item in obj.GetType().GetProperties())
                     {
-                        Common cmn = new Common();
                         if (item.Name == sColumn)
                         {
-                            cmn.id = item.GetValue(obj, null).ToInt32();
-                            iCommon.Add(cmn);
+                            iCommon.Add(item.GetValue(obj, null).ToInt32());
                             break;
                         }
                     }
@@ -1401,16 +1346,14 @@ namespace AshproORM
                 throw;
             }
         }
-        private static List<Common> GetIdList(DataTable sTable)
+        private static List<int> GetIdList(DataTable sTable)
         {
             try
             {
-                List<Common> iCommon = new List<Common>();
+                List<int> iCommon = new List<int>();
                 foreach (DataRow drw in sTable.Rows)
                 {
-                    Common cmn = new Common();
-                    cmn.id = Convert.ToInt32(drw[0].ToString());
-                    iCommon.Add(cmn);
+                    iCommon.Add(drw[0].ToInt32());
                     continue;
                 }
                 return iCommon;
@@ -1556,7 +1499,7 @@ namespace AshproORM
             query += ")";
             return query;
         }
-        private static string getUpdateCommand(string table, List<KeyValuePair<dynamic, dynamic>> values, string column, string sValue)
+        private static string getUpdateCommand(string table, List<KeyValuePair<dynamic, dynamic>> values, string column, int sValue)
         {
             string query = null;
             query += "Update  " + table + " Set ";
@@ -1794,14 +1737,13 @@ namespace AshproORM
             var oldList = GetIdList(oldDatas, sColumn);
             try
             {
-                if (oldList.Count > 0)
+                if (oldList.Any())
                 {
-                    foreach (Common item in oldList)
+                    foreach (int item in oldList)
                     {
-                        bool included = newList.Any(x => x.id == item.id);
-                        if (!included)
+                        if (!newList.Any(x => x == item))
                         {
-                            DeleteMethod_SP(item.id, "spDelete" + sTable, sCon);
+                            DeleteMethod_SP(item, "spDelete" + sTable, sCon);
                         }
                     }
                 }
@@ -1810,12 +1752,10 @@ namespace AshproORM
             {
                 throw ex;
             }
-            foreach (Common item in newList)
+            foreach (int item in newList)
             {
-                bool included = oldList.Any(x => x.id == item.id);
-                if (!included)
+                if (!oldList.Any(x => x == item))
                 {
-                    int? sVal = item.id;
                     try
                     {
                         foreach (var obj in newDatas)
@@ -1825,7 +1765,7 @@ namespace AshproORM
                                 if (x.Name == sColumn)
                                 {
                                     int? iVal = x.GetValue(obj, null).ToInt32();
-                                    if (iVal == sVal)
+                                    if (iVal == item)
                                     {
                                         InsertMethod_SP(obj, "spInsert" + sTable, sCon);
                                         break;
@@ -1843,7 +1783,6 @@ namespace AshproORM
                 }
                 else
                 {
-                    int? sVal = item.id;
                     try
                     {
                         foreach (var obj in newDatas)
@@ -1853,7 +1792,7 @@ namespace AshproORM
                                 if (x.Name == sColumn)
                                 {
                                     int? iVal = x.GetValue(obj, null).ToInt32();
-                                    if (iVal == sVal)
+                                    if (iVal == item)
                                     {
                                         UpdateMethod_SP(obj, "spUpdate" + sTable, sCon);
                                     }
@@ -2497,12 +2436,11 @@ namespace AshproORM
             {
                 if (oldList.Count > 0)
                 {
-                    foreach (Common item in oldList)
+                    foreach (int item in oldList)
                     {
-                        bool included = newList.Any(x => x.id == item.id);
-                        if (!included)
+                        if (!newList.Any(x => x == item))
                         {
-                            await DeleteAsync_SP(item.id, "spDelete" + sTable, sCon);
+                            await DeleteAsync_SP(item, "spDelete" + sTable, sCon);
                         }
                     }
                 }
@@ -2511,12 +2449,10 @@ namespace AshproORM
             {
                 throw ex;
             }
-            foreach (Common item in newList)
+            foreach (int item in newList)
             {
-                bool included = oldList.Any(x => x.id == item.id);
-                if (!included)
+                if (!oldList.Any(x => x == item))
                 {
-                    int? sVal = item.id;
                     try
                     {
                         foreach (var obj in newDatas)
@@ -2526,7 +2462,7 @@ namespace AshproORM
                                 if (x.Name == sColumn)
                                 {
                                     int? iVal = x.GetValue(obj, null).ToInt32();
-                                    if (iVal == sVal)
+                                    if (iVal == item)
                                     {
                                         await InsertAsync_SP(obj, "spInsert" + sTable, sCon);
                                         break;
@@ -2544,7 +2480,6 @@ namespace AshproORM
                 }
                 else
                 {
-                    int? sVal = item.id;
                     try
                     {
                         foreach (var obj in newDatas)
@@ -2554,7 +2489,7 @@ namespace AshproORM
                                 if (x.Name == sColumn)
                                 {
                                     int? iVal = x.GetValue(obj, null).ToInt32();
-                                    if (iVal == sVal)
+                                    if (iVal == item)
                                     {
                                         await UpdateAsync_SP(obj, "spUpdate" + sTable, sCon);
                                     }
@@ -2949,7 +2884,12 @@ namespace AshproORM
                         cmd.CommandTimeout = 0;
                         cmd.CommandType = CommandType.StoredProcedure;
                         await con.OpenAsync();
-                        return (await cmd.ExecuteScalarAsync());
+                        var data = await cmd.ExecuteScalarAsync();
+                        if (data == DBNull.Value)
+                        {
+                            return null;
+                        }
+                        return data;
                     }
                 }
             }
