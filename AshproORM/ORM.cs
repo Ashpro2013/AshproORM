@@ -336,7 +336,6 @@ namespace AshproORM
                 {
                     foreach (DataRow data in datas.Rows)
                     {
-                        bool iIncluded = false;
                         string sColumn = string.Empty;
                         string Query = string.Empty;
                         List<int> iCommon = new List<int>();
@@ -789,7 +788,6 @@ namespace AshproORM
                 {
                     foreach (DataRow data in datas.Rows)
                     {
-                        bool iIncluded = false;
                         string sColumn = string.Empty;
                         string Query = string.Empty;
                         List<int> iCommon = new List<int>();
@@ -1011,14 +1009,6 @@ namespace AshproORM
             });
             return value;
         }
-        private static async Task<T> GetItemAsync<T>(DataRow dr)
-        {
-            var value = await Task.Run<T>(() =>
-            {
-                return GetItem<T>(dr);
-            });
-            return value;
-        }
         private static async Task<string> getInsertCommandAsync(string table, List<KeyValuePair<dynamic, dynamic>> values)
         {
             var value = await Task.Run<string>(() =>
@@ -1179,6 +1169,7 @@ namespace AshproORM
                             {
                                 prop.SetValue(t, val, null);
                             }
+                            catch (NullReferenceException) { continue; }
                             catch (Exception ex)
                             {
                                 try
@@ -1357,24 +1348,6 @@ namespace AshproORM
                     continue;
                 }
                 return iCommon;
-            }
-            catch (Exception)
-            {
-                throw;
-            }
-        }
-        private static List<T> ConvertDataTable<T>(DataTable dt)
-        {
-            try
-            {
-                List<T> data = new List<T>();
-                foreach (DataRow row in dt.Rows)
-                {
-                    T item = GetItem<T>(row);
-
-                    data.Add(item);
-                }
-                return data;
             }
             catch (Exception)
             {
@@ -1575,7 +1548,19 @@ namespace AshproORM
                             cmd.Parameters.AddWithValue(item.Name, (byte[])(item.GetValue(entity, null)));
                             break;
                         case "DateTime":
-                            cmd.Parameters.AddWithValue("@" + item.Name, GetDate((DateTime)(item.GetValue(entity, null))));
+                            var val = GetDate((DateTime)(item.GetValue(entity, null)));
+                            cmd.Parameters.AddWithValue("@" + item.Name, val);
+                            break;
+                        case "Nullable`1":
+                            if (item.PropertyType.FullName.Contains("System.DateTime"))
+                            {
+                                val = GetDate((DateTime)(item.GetValue(entity, null)));
+                                cmd.Parameters.AddWithValue("@" + item.Name, val);
+                            }
+                            else
+                            {
+                                cmd.Parameters.AddWithValue(item.Name, item.GetValue(entity, null).ToString());
+                            }
                             break;
                         default:
                             cmd.Parameters.AddWithValue(item.Name, item.GetValue(entity, null).ToString());
